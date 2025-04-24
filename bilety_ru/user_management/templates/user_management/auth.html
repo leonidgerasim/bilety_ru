@@ -1,7 +1,7 @@
-{% extends 'main/base.html'%}
+{% extends 'user_management/base.html'%}
 
 {% block content %}
-<form action="{% url 'main:register' %}" method="post">
+<form action="si" method="post">
     {% csrf_token %}
     {{ form.as_p }}
     <button type="submit">Авторизоваться</button>

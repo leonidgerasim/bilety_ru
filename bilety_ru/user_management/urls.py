@@ -1,10 +1,9 @@
-from django.contrib import admin
 from django.urls import path, include
-from .views import index, SignUpView
+from .views import index, SignView
 
 app_name = 'user_management'
 
 urlpatterns = [
-    path('signup/', SignUpView.as_view(), name='signup'),
-    #path('', )
+    path('f/', index, name='index'),
+    path('', SignView.as_view(), name='signup'),
 ]

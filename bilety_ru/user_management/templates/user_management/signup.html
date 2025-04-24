@@ -1,7 +1,7 @@
 {% extends 'user_management/base.html'%}
 
 {% block content %}
-<form action="{% url 'user_management:signup' %}" method="post">
+<form method="post">
     {% csrf_token %}
     {{ form.as_p }}
     <button type="submit">Зарегистрироватся</button>

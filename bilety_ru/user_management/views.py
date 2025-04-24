@@ -1,6 +1,6 @@
 from django.shortcuts import render, redirect, HttpResponseRedirect, reverse
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
-from django.views.generic.edit import CreateView, View
+from django.views.generic.edit import CreateView, View, FormView
 from django.contrib.auth.models import User
 from .forms import SignUpForm
 from django.contrib.auth import authenticate, login, logout
@@ -9,33 +9,25 @@ from django.contrib import messages
 # Create your views here.
 
 
-class SignUpView(View):
+class SignView(FormView):
+    template_name = 'user_management/signup.html'
+    form_class = SignUpForm
+    #success_url = reverse('user_management:signup')
 
-    def get(self, request):
-        if request.method == 'POST':
-            form = SignUpForm(data=request.POST)
-            if form.is_valid():
-                username = form.cleaned_data.get('first_name') + ' ' + form.cleaned_data.get('last_name')
-                password = form.cleaned_data.get('password1')
-                first_name = form.cleaned_data.get('first_name')
-                last_name = form.cleaned_data.get('last_name')
-                email = form.cleaned_data.get('email')
-                user = User(username=username, password=password, first_name=first_name,
-                            last_name=last_name, email=email)
-                user.save()
-                login(request, user)
-                messages.success(request, ("Вы успешно зарегистрированы."))
-                return redirect('') #reverse('user_management:signup'))
-            else:
-                messages.success(request, ("Что то пошло не так, поробуйте ещё раз"))
-                return HttpResponseRedirect(reverse('user_management:signup'))
+    def form_valid(self, form):
+        request = self.request
+        if request.user.is_authenticated:
+            messages.success(request, ("Вы не успешно зарегистрированы."))
+            #return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
         else:
-            form = SignUpForm()
-            context = {'title': 'Страница регистрации',
-                       'form': form,
-                       }
-            return render(request, 'user_management/signup.html', context)
-
+            f = form.save(commit=False)
+            f.username = form.cleaned_data.get('first_name') + ' ' + form.cleaned_data.get('last_name')
+            f.save()
+            user = authenticate(username=form.cleaned_data.get('username'),
+                                password=form.cleaned_data.get('password'))
+            login(request, user)
+            messages.success(request, ("Вы успешно зарегистрированы."))
+            return redirect('/')
 
 
 #class AuthView()
