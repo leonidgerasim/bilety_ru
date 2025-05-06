@@ -43,7 +43,7 @@ class SignInView(FormView):
 
     def get(self, request, *args, **kwargs):
         if request.user.is_authenticated:
-            return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+            return redirect('/')
         else:
             return super().get(request, *args, **kwargs)
 

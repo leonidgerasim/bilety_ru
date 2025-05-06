@@ -1,9 +1,0 @@
-{% extends 'user_managment/base.html'%}
-
-{% block content %}
-<form action="{% url 'user_managment:register' %}" method="post">
-    {% csrf_token %}
-    {{ form.as_p }}
-    <button type="submit">Зарегистрироватся</button>
-</form>
-{% endblock %}
