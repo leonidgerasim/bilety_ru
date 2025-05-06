@@ -26,11 +26,11 @@ class FlightOffers(models.Model):
     #nonHomogeneous = models.BooleanField()
     #oneWay = models.BooleanField()
     #lastTicketingDate = models.DateField()
-    numberSeats = models.IntegerField(max_length=4)
+    numberSeats = models.IntegerField()
     dep_duration = models.TimeField()
     arr_duration = models.TimeField(default=None)
     currencyCode = models.CharField(max_length=3)
-    totalPrice = models.DecimalField(max_length=10, max_digits=2)
+    totalPrice = models.DecimalField(max_digits=10, decimal_places=2)
 
 
 class FlightSegments(models.Model):

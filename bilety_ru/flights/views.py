@@ -7,4 +7,4 @@ from django.views.generic.edit import CreateView, View, FormView
 #class OffersSearch(FormView):
 
 def index(request):
-    return render(request, 'flights/flights.html')
+    return render(request, 'flights/search.html')
