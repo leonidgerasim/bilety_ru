@@ -1,5 +1,15 @@
 {% extends 'user_management/base.html'%}
 
 {% block content %}
-qweqwe
+<form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Найти</button>
+</form>
+<p>
+    {{ test_data }}
+</p>
+<p>
+    {{ requests }}
+</p>
 {% endblock %}

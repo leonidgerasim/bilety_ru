@@ -6,18 +6,21 @@ import datetime
 
 
 class FlightRequest(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    # currencyCode = models.CharField(max_length=3)
-    # originLC = models.CharField(max_length=3)
-    # destinationLC = models.CharField(max_length=3)
-    # departureDate = models.DateField()
-    # departureTime = models.TimeField(default=datetime.time(10, 10, 10))
-    # cabin = models.CharField(max_length=20)
-    # includedAirlines = models.CharField(max_length=200)
-    # excludedAirlines = models.CharField(max_length=200)
-    # travalClass = models.CharField(max_length=50)
-    # nonStop = models.BooleanField()
-    # maxPrice = models.DecimalField(max_length=10, max_digits=2)
+    currencyCode = models.CharField(max_length=3)
+    originLC = models.CharField(max_length=3)
+    destinationLC = models.CharField(max_length=3)
+    departureDate = models.DateField()
+    departureTime = models.TimeField(default=datetime.time(10, 10, 10))
+    returnDate = models.DateField(null=True, blank=True)
+    adults = models.IntegerField()
+    children = models.IntegerField(null=True, blank=True)
+    infants = models.IntegerField(null=True, blank=True)
+    cabin = models.CharField(max_length=20, null=True, blank=True)
+    includedAirlines = models.CharField(max_length=200, null=True, blank=True)
+    excludedAirlines = models.CharField(max_length=200, null=True, blank=True)
+    travalClass = models.CharField(max_length=50, null=True, blank=True)
+    nonStop = models.BooleanField(default=False)
+    maxPrice = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
 
 
 class FlightOffers(models.Model):

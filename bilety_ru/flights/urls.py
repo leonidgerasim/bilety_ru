@@ -1,9 +1,8 @@
-from django.contrib import admin
 from django.urls import path, include
-from .views import index
+from .views import index, OffersSearch
 
 app_name = 'flights'
 
 urlpatterns = [
-    path('', index, name='index'),
+    path('', OffersSearch.as_view(), name='home'),
 ]
