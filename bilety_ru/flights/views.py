@@ -13,7 +13,8 @@ class OffersSearch(FormView):
     success_url = ''
 
     def form_valid(self, form):
-        form.save()
+        offer_req = form.save()
+        self.request.session['offer_request'] = offer_req.id
         return HttpResponseRedirect(reverse('flights:home'))
 
     def form_invalid(self, form):
@@ -24,6 +25,8 @@ class OffersSearch(FormView):
 
         context['test_data'] = self.request.POST
         context['requests'] = FlightOffers.objects.all()
+        if 'offer_request' in self.request.session:
+            context['index_req'] = self.request.session['offer_request']
         return context
 
 
