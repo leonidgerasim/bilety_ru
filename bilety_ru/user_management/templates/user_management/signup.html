@@ -1,6 +1,6 @@
 {% extends 'user_management/base.html'%}
 
-{% block content %}
+{% block container %}
 <form method="post">
     {% csrf_token %}
     {{ form.as_p }}

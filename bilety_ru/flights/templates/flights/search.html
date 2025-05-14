@@ -1,49 +1,25 @@
 {% extends 'user_management/base.html'%}
+{% load static %}
 
-{% block style %}
-    .autocomplete {
-            position: relative;
-            display: inline-block;
-        }
-
-        .autocomplete-items {
-            position: absolute;
-            border: 1px solid #d4d4d4;
-            border-bottom: none;
-            border-top: none;
-            z-index: 99;
-            top: 100%;
-            left: 0;
-            right: 0;
-            max-height: 200px;
-            overflow-y: auto;
-        }
-
-        .autocomplete-items div {
-            padding: 10px;
-            cursor: pointer;
-            background-color: #fff;
-            border-bottom: 1px solid #d4d4d4;
-        }
-
-        .autocomplete-items div:hover {
-            background-color: #e9e9e9;
-        }
+{% block head %}
+<!--<link rel="stylesheet" type="text/css" href="{% static 'flights/style.css' %}">-->
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css"
+      integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
 {% endblock %}
 
-{% block content %}
+{% block container %}
 <form method="post" id="cityForm">
     {% csrf_token %}
     <div>
         {{ form.currencyCode }}
     </div>
     <div class="autocomplete">
-        {{ form.originCity }}
+        {{ form.originLocationCode }}
 <!--        <input type="text" id="originCity" placeholder="Введите город отправления...">-->
         <div id="originList" class="autocomplete-items"></div>
     </div>
     <div class="autocomplete">
-        {{ form.destinationCity }}
+        {{ form.destinationLocationCode }}
 <!--        <input type="text" id="destinationCity" placeholder="Введите город прибытия...">-->
         <div id="destinationList" class="autocomplete-items"></div>
     </div>
@@ -62,9 +38,8 @@
     {{ form_data }}
 </p>
 <script>
-alert('err');
-document.addEventListener('DOMContentLoaded', func_list('id_originCity', 'originList'));
-document.addEventListener('DOMContentLoaded', func_list('id_destinationCity', 'destinationList'));
+document.addEventListener('DOMContentLoaded', func_list('id_originLocationCode', 'originList'));
+document.addEventListener('DOMContentLoaded', func_list('id_destinationLocationCode', 'destinationList'));
 function func_list(id_input, id_list) {
     const input = document.getElementById(id_input);
     const autocompleteList = document.getElementById(id_list);
@@ -154,4 +129,57 @@ function func_list(id_input, id_list) {
 
 }
 </script>
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js"
+        integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js"
+        integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js"
+        integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+{% endblock %}
+
+{% block body %}
+<div class="row pt-5">
+    <div class="col-md-6">
+    <div class="col-md-12 offset-1">
+        {% if response %}
+            <h3 class="login-heading mb-4 text-left">Available flights</h3>
+            {% for r, flight in response %}
+                {% if r.0firstFlightDepartureDate %}
+                    <div class="card mb-3 text-center" style="max-width: 40rem;">
+                        <div class="nounderline card-header text-center" style="font-size: 26;color: darkred;">${{ r.price }}</div>
+                        <div class="card-body">
+                            <div class="card-text">
+                                <h4 class="font-weight-light text-info pb-3">Departure <span class="smallstyle">Total duration {{ r.0FlightTotalDuration }}</span></h4>
+                                    <h4><img src={{ r.firstFlightAirlineLogo }} alt={{ r.firstFlightAirline }}> {{ r.0firstFlightDepartureDate }} {{ r.0firstFlightDepartureAirport }}
+                                        <a href="#" data-toggle="tooltip" class="nounderline text-info" title={{ r.0firstFlightArrivalDuration }} duration>&#10230</a> {{ r.0firstFlightArrivalAirport }} {{ r.0firstFlightArrivalDate }}</h4>
+                                    {% if r.0secondFlightDepartureAirport %}
+                                        <p class="nounderline elegantstyle">Connection duration is {{ r.0stop_time }}</p>
+                                        <h4><img src={{ r.secondFlightAirlineLogo }} alt={{ r.secondFlightAirline }}> {{ r.0secondFlightDepartureDate }} {{ r.0secondFlightDepartureAirport }}
+                                            <a href="#" data-toggle="tooltip" class="nounderline text-info" title={{ r.0secondFlightArrivalDuration }} duration>&#10230</a> {{ r.0secondFlightArrivalAirport }} {{ r.0secondFlightArrivalDate }}</h4>
+                                    {% endif %}
+                                    {% if r.1firstFlightDepartureAirport %}
+                                <hr class="newstyle">
+                                <h4 class="font-weight-light text-info pb-3">Return <span class="" style="color: black; font-size: 15px;">Total duration {{ r.1FlightTotalDuration }}</span></h4>
+                                        <h4><img src={{ r.1firstFlightAirlineLogo }} alt={{ r.1firstFlightAirline }}> {{ r.1firstFlightDepartureDate }} {{ r.1firstFlightDepartureAirport }}
+                                            <a href="#" data-toggle="tooltip" class="nounderline text-info" title={{ r.1firstFlightArrivalDuration }} duration>&#10230</a> {{ r.1firstFlightArrivalAirport }} {{ r.1firstFlightArrivalDate }}</h4>
+                                        {% if r.1secondFlightDepartureAirport %}
+                                            <p class="nounderline elegantstyle">Connection duration is {{ r.1stop_time }}</p>
+                                            <h4><img src={{ r.1secondFlightAirlineLogo }} alt={{ r.1secondFlightAirline }}> {{ r.1secondFlightDepartureDate }} {{ r.1secondFlightDepartureAirport }}
+                                                <a href="#" data-toggle="tooltip" class="nounderline text-info" title={{ r.1secondFlightArrivalDuration }} duration>&#10230</a> {{ r.1secondFlightArrivalAirport }} {{ r.1secondFlightArrivalDate }}</h4>
+                                        {% endif %}
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                {% endif %}
+            {% endfor %}
+        {% else %}
+            <h4 class="login-heading mb-4 text-left">No flights found for this itinerary</h4>
+        {% endif %}
+    </div>
+  </div>
+</div>
 {% endblock %}
