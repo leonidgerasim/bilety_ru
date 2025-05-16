@@ -5,8 +5,8 @@ from .models import FlightRequest
 class OfferSearchForm(forms.ModelForm):
     CURRENCY_CODES = [('EUR', '€'), ('RUB', '₽'), ('USD', '$')]
 
-    currencyCode = forms.ChoiceField(choices=CURRENCY_CODES, initial='EUR', widget=forms.Select())
-    returnDate = forms.DateField(required=False)
+    currencyCode = forms.ChoiceField(choices=CURRENCY_CODES, initial='EUR', label='Валюта')
+    # returnDate = forms.DateField(required=False)
 
     class Meta:
         model = FlightRequest
@@ -17,7 +17,7 @@ class OfferSearchForm(forms.ModelForm):
                   'returnDate',
                   'adults')
         labels = {
-            'currencyCode': 'Валюта',
+            'currencyCode': "Валюта",
             'originLocationCode': 'Аэропорт отправления',
             'destinationLocationCode': 'Аэропорт прибытия',
             'departureDate': 'Дата отправления',
@@ -25,7 +25,7 @@ class OfferSearchForm(forms.ModelForm):
             'adults': 'Число взрослых пассажиров',
         }
         widgets = {
-            'currencyCode': forms.Select(),
+            #'currencyCode': forms.Select(),
             'departureDate': forms.SelectDateWidget(),
             'returnDate': forms.SelectDateWidget(),
         }

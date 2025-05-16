@@ -23,20 +23,21 @@ class OffersSearch(FormView):
 
     def form_valid(self, form):
         func = lambda date: date if date is not None else None
-        form_data = {
-            'currencyCode': form.cleaned_data['currencyCode'],
-            'originCity': self.request.POST['originCity'],
-            'destinationCity': self.request.POST['destinationCity'],
-            'departureDate': (form.cleaned_data['departureDate'].year,
-                              form.cleaned_data['departureDate'].month,
-                              form.cleaned_data['departureDate'].day),
-            'adults': form.cleaned_data['adults'],
-        }
-        if 'returnDate' in form.cleaned_data:
-            form_data['returnDate'] = (form.cleaned_data['returnDate'].year,
-                                       form.cleaned_data['returnDate'].month,
-                                       form.cleaned_data['returnDate'].day)
-        self.request.session['form_data'] = form_data
+        flight_request = form.save()
+        # form_data = {
+        #     'currencyCode': form.cleaned_data['currencyCode'],
+        #     'originCity': self.request.POST['originCity'],
+        #     'destinationCity': self.request.POST['destinationCity'],
+        #     'departureDate': (form.cleaned_data['departureDate'].year,
+        #                       form.cleaned_data['departureDate'].month,
+        #                       form.cleaned_data['departureDate'].day),
+        #     'adults': form.cleaned_data['adults'],
+        # }
+        # if 'returnDate' in form.cleaned_data:
+        #     form_data['returnDate'] = (form.cleaned_data['returnDate'].year,
+        #                                form.cleaned_data['returnDate'].month,
+        #                                form.cleaned_data['returnDate'].day)
+        self.request.session['id_offer_search'] = flight_request.id
         return HttpResponseRedirect(reverse('flights:home'))
 
     def form_invalid(self, form):
@@ -44,25 +45,29 @@ class OffersSearch(FormView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        if 'form_data' in self.request.session:
-            form_data = self.request.session['form_data']
-            kwargs = {
-                'currencyCode': form_data['currencyCode'],
-                'originLocationCode': form_data['originCity'][0:3],
-                'destinationLocationCode': form_data['destinationCity'][0:3],
-                'departureDate': datetime.date(int(form_data['departureDate'][0]),
-                                               int(form_data['departureDate'][1]),
-                                               int(form_data['departureDate'][2])),
-                'adults': int(form_data['adults']),
-                'max': 3,
-            }
-            if form_data['returnDate']:
-                kwargs['returnDate'] = datetime.date(int(form_data['returnDate'][0]),
-                                                int(form_data['returnDate'][1]),
-                                                int(form_data['returnDate'][2])),
-            context['form'] = OfferSearchForm(initial=f)
-            context['form_data'] = f
-            #context['response'] = offer_search_api(self.request, **kwargs)
+        # if 'form_data' in self.request.session:
+        #     form_data = self.request.session['form_data']
+        #     kwargs = {
+        #         'currencyCode': form_data['currencyCode'],
+        #         'originLocationCode': form_data['originCity'][0:3],
+        #         'destinationLocationCode': form_data['destinationCity'][0:3],
+        #         'departureDate': datetime.date(int(form_data['departureDate'][0]),
+        #                                        int(form_data['departureDate'][1]),
+        #                                        int(form_data['departureDate'][2])),
+        #         'adults': int(form_data['adults']),
+        #         'max': 3,
+        #     }
+        #     if form_data['returnDate']:
+        #         kwargs['returnDate'] = datetime.date(int(form_data['returnDate'][0]),
+        #                                         int(form_data['returnDate'][1]),
+        #                                         int(form_data['returnDate'][2])),
+        #     context['form'] = OfferSearchForm(initial=f)
+        #     context['form_data'] = f
+        #     #context['response'] = offer_search_api(self.request, **kwargs)
+        if 'id_offer_search' in self.request.session:
+            context['form'] = OfferSearchForm(data=OffersSearch.objects.get(id=self.request.session['id_offer_search']))
+            context['f_req'] = OffersSearch.objects.get(id=self.request.session['id_offer_search'])
+            context['f_requests'] = OffersSearch.objects.all()
         return context
 
 
