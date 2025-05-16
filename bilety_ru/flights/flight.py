@@ -9,10 +9,11 @@ class Flight:
     def construct_flights(self):
         offer = {}
         index = 0
-        offer['price'] = self.flight['price']['total']
         offer['id'] = self.flight['id']
+        offer['price'] = self.flight['price']['total']
+        offer['duration'] = self.flight['itineraries']['duration']
 
-        for f in self.flight['itineraries']:
+        for f in self.flight['itineraries'][0]['segments']:
             # Keys starting from 0 correspond to Outbound flights and the keys starting from 1 tp Return flights
             if len(self.flight['itineraries'][index]['segments']) == 2:  # one stop flight
                 offer[str(index) + 'firstFlightDepartureAirport'] = self.flight['itineraries'][index]['segments'][0]['departure']['iataCode']

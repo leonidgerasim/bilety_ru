@@ -2,7 +2,7 @@
 {% load static %}
 
 {% block head %}
-<!--<link rel="stylesheet" type="text/css" href="{% static 'flights/style.css' %}">-->
+<link rel="stylesheet" type="text/css" href="{% static 'flights/style.css' %}">
 <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css"
       integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
 {% endblock %}
@@ -37,107 +37,108 @@
 <p>
     {{ form_data }}
 </p>
-<script>
-document.addEventListener('DOMContentLoaded', func_list('id_originLocationCode', 'originList'));
-document.addEventListener('DOMContentLoaded', func_list('id_destinationLocationCode', 'destinationList'));
-function func_list(id_input, id_list) {
-    const input = document.getElementById(id_input);
-    const autocompleteList = document.getElementById(id_list);
-    let currentFocus = -1;
+<!--<script>-->
+<!--document.addEventListener('DOMContentLoaded', func_list('id_originLocationCode', 'originList'));-->
+<!--document.addEventListener('DOMContentLoaded', func_list('id_destinationLocationCode', 'destinationList'));-->
+<!--function func_list(id_input, id_list) {-->
+<!--    const input = document.getElementById(id_input);-->
+<!--    const autocompleteList = document.getElementById(id_list);-->
+<!--    let currentFocus = -1;-->
 
-    input.addEventListener('input', function(e) {
-        const query = e.target.value;
+<!--    input.addEventListener('input', function(e) {-->
+<!--        const query = e.target.value;-->
 
-        if (query.length < 2) {
-            closeAllLists();
-            return;
-        }
+<!--        if (query.length < 2) {-->
+<!--            closeAllLists();-->
+<!--            return;-->
+<!--        }-->
 
-        fetch(`/api_airport_search/?query=${encodeURIComponent(query)}`)
-            .then(response => response.json())
-            .then(data => {
-                showSuggestions(data);
-            });
-    });
+<!--        fetch(`/api_airport_search/?query=${encodeURIComponent(query)}`)-->
+<!--            .then(response => response.json())-->
+<!--            .then(data => {-->
+<!--                showSuggestions(data);-->
+<!--            });-->
+<!--    });-->
 
-    input.addEventListener('keydown', function(e) {
-        const items = autocompleteList.getElementsByTagName('div');
+<!--    input.addEventListener('keydown', function(e) {-->
+<!--        const items = autocompleteList.getElementsByTagName('div');-->
 
-        if (e.keyCode === 40) {
-            currentFocus++;
-            addActive(items);
-        } else if (e.keyCode === 38) {
-            currentFocus--;
-            addActive(items);
-        } else if (e.keyCode === 13) { // Enter
-            e.preventDefault();
-            if (currentFocus > -1) {
-                if (items) items[currentFocus].click();
-            }
-        }
-    });
+<!--        if (e.keyCode === 40) {-->
+<!--            currentFocus++;-->
+<!--            addActive(items);-->
+<!--        } else if (e.keyCode === 38) {-->
+<!--            currentFocus&#45;&#45;;-->
+<!--            addActive(items);-->
+<!--        } else if (e.keyCode === 13) { // Enter-->
+<!--            e.preventDefault();-->
+<!--            if (currentFocus > -1) {-->
+<!--                if (items) items[currentFocus].click();-->
+<!--            }-->
+<!--        }-->
+<!--    });-->
 
-    function showSuggestions(items) {
-        closeAllLists();
-        currentFocus = -1;
+<!--    function showSuggestions(items) {-->
+<!--        closeAllLists();-->
+<!--        currentFocus = -1;-->
 
-        if (!items || items.length === 0) return;
+<!--        if (!items || items.length === 0) return;-->
 
-        items.forEach(item => {
-            const itemElement = document.createElement('div');
-            itemElement.innerHTML = `<strong>${item.substr(0, input.value.length)}</strong>${item.substr(input.value.length)}`;
-            itemElement.innerHTML += `<input type='hidden' value='${item}'>`;
+<!--        items.forEach(item => {-->
+<!--            const itemElement = document.createElement('div');-->
+<!--            itemElement.innerHTML = `<strong>${item.substr(0, input.value.length)}</strong>${item.substr(input.value.length)}`;-->
+<!--            itemElement.innerHTML += `<input type='hidden' value='${item}'>`;-->
 
-            itemElement.addEventListener('click', function() {
-                input.value = this.getElementsByTagName('input')[0].value;
-                closeAllLists();
-            });
+<!--            itemElement.addEventListener('click', function() {-->
+<!--                input.value = this.getElementsByTagName('input')[0].value;-->
+<!--                closeAllLists();-->
+<!--            });-->
 
-            autocompleteList.appendChild(itemElement);
-        });
-    }
+<!--            autocompleteList.appendChild(itemElement);-->
+<!--        });-->
+<!--    }-->
 
-    function addActive(items) {
-        if (!items) return false;
+<!--    function addActive(items) {-->
+<!--        if (!items) return false;-->
 
-        removeActive(items);
+<!--        removeActive(items);-->
 
-        if (currentFocus >= items.length) currentFocus = 0;
-        if (currentFocus < 0) currentFocus = (items.length - 1);
+<!--        if (currentFocus >= items.length) currentFocus = 0;-->
+<!--        if (currentFocus < 0) currentFocus = (items.length - 1);-->
 
-        items[currentFocus].classList.add('autocomplete-active');
-    }
+<!--        items[currentFocus].classList.add('autocomplete-active');-->
+<!--    }-->
 
-    function removeActive(items) {
-        for (let i = 0; i < items.length; i++) {
-            items[i].classList.remove('autocomplete-active');
-        }
-    }
+<!--    function removeActive(items) {-->
+<!--        for (let i = 0; i < items.length; i++) {-->
+<!--            items[i].classList.remove('autocomplete-active');-->
+<!--        }-->
+<!--    }-->
 
-    function closeAllLists() {
-        const items = autocompleteList.getElementsByTagName('div');
-        for (let i = 0; i < items.length; i++) {
-            items[i].parentNode.removeChild(items[i]);
-        }
-    }
+<!--    function closeAllLists() {-->
+<!--        const items = autocompleteList.getElementsByTagName('div');-->
+<!--        for (let i = 0; i < items.length; i++) {-->
+<!--            items[i].parentNode.removeChild(items[i]);-->
+<!--        }-->
+<!--    }-->
 
-    document.addEventListener('click', function(e) {
-        if (e.target !== input) {
-            closeAllLists();
-        }
-    });
+<!--    document.addEventListener('click', function(e) {-->
+<!--        if (e.target !== input) {-->
+<!--            closeAllLists();-->
+<!--        }-->
+<!--    });-->
 
-}
-</script>
-    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js"
-        integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
-        crossorigin="anonymous"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js"
-        integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
-        crossorigin="anonymous"></script>
-<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js"
-        integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
-        crossorigin="anonymous"></script>
+<!--}-->
+<!--</script>-->
+<script src="{% static 'flights/search.js' %}"></script>
+<!--<script src="https://code.jquery.com/jquery-3.2.1.slim.min.js"-->
+<!--        integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"-->
+<!--        crossorigin="anonymous"></script>-->
+<!--<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js"-->
+<!--        integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"-->
+<!--        crossorigin="anonymous"></script>-->
+<!--<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js"-->
+<!--        integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"-->
+<!--        crossorigin="anonymous"></script>-->
 {% endblock %}
 
 {% block body %}

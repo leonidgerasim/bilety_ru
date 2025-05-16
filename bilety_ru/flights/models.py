@@ -7,8 +7,8 @@ import datetime
 
 class FlightRequest(models.Model):
     currencyCode = models.CharField(max_length=3)
-    originLC = models.CharField(max_length=3)
-    destinationLC = models.CharField(max_length=3)
+    originLocationCode = models.CharField(max_length=3)
+    destinationLocationCode = models.CharField(max_length=3)
     departureDate = models.DateField()
     departureTime = models.TimeField(default=datetime.time(10, 10, 10))
     returnDate = models.DateField(null=True, blank=True)

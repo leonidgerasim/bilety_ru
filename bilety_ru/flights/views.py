@@ -56,7 +56,7 @@ class OffersSearch(FormView):
                 'adults': int(form_data['adults']),
                 'max': 3,
             }
-            if  form_data['returnDate']:
+            if form_data['returnDate']:
                 kwargs['returnDate'] = datetime.date(int(form_data['returnDate'][0]),
                                                 int(form_data['returnDate'][1]),
                                                 int(form_data['returnDate'][2])),
