@@ -23,16 +23,16 @@ class OffersSearch(FormView):
 
     def form_valid(self, form):
         func = lambda date: date if date is not None else None
-        flight_request = form.save()
-        # form_data = {
-        #     'currencyCode': form.cleaned_data['currencyCode'],
-        #     'originCity': self.request.POST['originCity'],
-        #     'destinationCity': self.request.POST['destinationCity'],
-        #     'departureDate': (form.cleaned_data['departureDate'].year,
-        #                       form.cleaned_data['departureDate'].month,
-        #                       form.cleaned_data['departureDate'].day),
-        #     'adults': form.cleaned_data['adults'],
-        # }
+        # flight_request = form.save()
+        form_data = {
+            'currencyCode': form.cleaned_data['currencyCode'],
+            'originCity': self.request.POST['originCity'],
+            'destinationCity': self.request.POST['destinationCity'],
+            'departureDate': (form.cleaned_data['departureDate'].year,
+                              form.cleaned_data['departureDate'].month,
+                              form.cleaned_data['departureDate'].day),
+            'adults': form.cleaned_data['adults'],
+        }
         # if 'returnDate' in form.cleaned_data:
         #     form_data['returnDate'] = (form.cleaned_data['returnDate'].year,
         #                                form.cleaned_data['returnDate'].month,

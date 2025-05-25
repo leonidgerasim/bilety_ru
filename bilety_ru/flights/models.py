@@ -6,9 +6,9 @@ import datetime
 
 
 class FlightRequest(models.Model):
-    currencyCode = models.CharField(max_length=3)
-    originLocationCode = models.CharField(max_length=3)
-    destinationLocationCode = models.CharField(max_length=3)
+    currencyCode = models.CharField(max_length=50)
+    originLocationCode = models.CharField(max_length=50)
+    destinationLocationCode = models.CharField(max_length=50)
     departureDate = models.DateField()
     departureTime = models.TimeField(default=datetime.time(10, 10, 10))
     returnDate = models.DateField(null=True, blank=True)
@@ -21,6 +21,7 @@ class FlightRequest(models.Model):
     travalClass = models.CharField(max_length=50, blank=True)
     nonStop = models.BooleanField(default=False)
     maxPrice = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    create_in = models.DateTimeField(auto_now_add=True)
 
 
 class FlightOffers(models.Model):
