@@ -6,6 +6,8 @@ import datetime
 
 
 class FlightRequest(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    session = models.CharField(max_length=255, null=True, blank=True)
     currencyCode = models.CharField(max_length=50)
     originLocationCode = models.CharField(max_length=50)
     destinationLocationCode = models.CharField(max_length=50)
@@ -15,16 +17,16 @@ class FlightRequest(models.Model):
     adults = models.IntegerField()
     children = models.IntegerField(null=True, blank=True)
     infants = models.IntegerField(null=True, blank=True)
-    cabin = models.CharField(max_length=20, blank=True)
-    includedAirlines = models.CharField(max_length=200, blank=True)
-    excludedAirlines = models.CharField(max_length=200, blank=True)
-    travalClass = models.CharField(max_length=50, blank=True)
-    nonStop = models.BooleanField(default=False)
+    cabin = models.CharField(max_length=20, null=True, blank=True)
+    includedAirlines = models.CharField(max_length=200, null=True, blank=True)
+    excludedAirlines = models.CharField(max_length=200, null=True, blank=True)
+    travalClass = models.CharField(max_length=50, null=True, blank=True)
+    nonStop = models.BooleanField(null=True, blank=True)
     maxPrice = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     create_in = models.DateTimeField(auto_now_add=True)
 
 
-class FlightOffers(models.Model):
+class FlightOffer(models.Model):
     flightRequest = models.ForeignKey(FlightRequest, on_delete=models.CASCADE)
     #instantTicketingRequired = models.BooleanField()
     #nonHomogeneous = models.BooleanField()
@@ -37,8 +39,8 @@ class FlightOffers(models.Model):
     totalPrice = models.DecimalField(max_digits=10, decimal_places=2)
 
 
-class FlightSegments(models.Model):
-    offer = models.ForeignKey(FlightOffers, on_delete=models.CASCADE)
+class FlightSegment(models.Model):
+    offer = models.ForeignKey(FlightOffer, on_delete=models.CASCADE)
     there_seg = models.BooleanField()
     dep_iataCode = models.CharField(max_length=3)
     dep_terminal = models.CharField(max_length=2)

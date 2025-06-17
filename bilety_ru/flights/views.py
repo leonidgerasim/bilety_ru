@@ -1,7 +1,7 @@
 from django.shortcuts import render
 from .forms import OfferSearchForm
 from django.shortcuts import render, redirect, HttpResponseRedirect, reverse, HttpResponse
-from .models import FlightOffers
+from .models import FlightOffer, FlightRequest, FlightSegment
 from django.views.generic.edit import CreateView, View, FormView
 # from rest_framework.views import APIView, status
 # from rest_framework.response import Response
@@ -22,17 +22,20 @@ class OffersSearch(FormView):
     success_url = ''
 
     def form_valid(self, form):
-        func = lambda date: date if date is not None else None
-        # flight_request = form.save()
-        form_data = {
-            'currencyCode': form.cleaned_data['currencyCode'],
-            'originCity': self.request.POST['originCity'],
-            'destinationCity': self.request.POST['destinationCity'],
-            'departureDate': (form.cleaned_data['departureDate'].year,
-                              form.cleaned_data['departureDate'].month,
-                              form.cleaned_data['departureDate'].day),
-            'adults': form.cleaned_data['adults'],
-        }
+        # func = lambda date: date if date is not None else None
+        flight_request = form.save(commit=False)
+        if self.request.user.is_authentificated:
+            flight_request.user = self.request.user
+        flight_request.session = self.request.session.session_key
+        # form_data = {
+        #     'currencyCode': form.cleaned_data['currencyCode'],
+        #     'originCity': self.request.POST['originCity'],
+        #     'destinationCity': self.request.POST['destinationCity'],
+        #     'departureDate': (form.cleaned_data['departureDate'].year,
+        #                       form.cleaned_data['departureDate'].month,
+        #                       form.cleaned_data['departureDate'].day),
+        #     'adults': form.cleaned_data['adults'],
+        # }
         # if 'returnDate' in form.cleaned_data:
         #     form_data['returnDate'] = (form.cleaned_data['returnDate'].year,
         #                                form.cleaned_data['returnDate'].month,
@@ -64,10 +67,14 @@ class OffersSearch(FormView):
         #     context['form'] = OfferSearchForm(initial=f)
         #     context['form_data'] = f
         #     #context['response'] = offer_search_api(self.request, **kwargs)
+        # if 'id_offer_search' in self.request.session:
+        #     context['form'] = OfferSearchForm(data=OffersSearch.objects.get(id=self.request.session['id_offer_search']))
+        #     context['f_req'] = OffersSearch.objects.get(id=self.request.session['id_offer_search'])
+        #     context['f_requests'] = OffersSearch.objects.all()
         if 'id_offer_search' in self.request.session:
-            context['form'] = OfferSearchForm(data=OffersSearch.objects.get(id=self.request.session['id_offer_search']))
-            context['f_req'] = OffersSearch.objects.get(id=self.request.session['id_offer_search'])
-            context['f_requests'] = OffersSearch.objects.all()
+            flight_req = FlightRequest.objects.filter(session=self.request.session.session_key).last()
+            context['offers'] = FlightOffer.objects.filter(flightRequest=flight_req)
+            context['segments'] = FlightSegment.objects.all()
         return context
 
 
@@ -98,6 +105,5 @@ def offer_search_api(request, **kwargs):
         offer = Flight(flight).construct_flights()
         search_flights_returned.append(offer)
         response = zip(search_flights_returned, search_flights.data)
-
     return response
 
