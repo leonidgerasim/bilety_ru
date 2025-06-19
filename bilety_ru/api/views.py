@@ -67,7 +67,7 @@ def offer_search_api(flight_req_id):
         kwargs = model_to_dict(flight_req)
         d = {}
         for key in kwargs.keys():
-            if kwargs[key] is not None and key not in ['id', 'user', 'session_key', 'create_in']:
+            if kwargs[key] is not None and key not in ['id', 'user', 'session_key', 'create_at']:
                 d[key] = kwargs[key]
         
         # Ограничиваем количество результатов
@@ -104,13 +104,19 @@ def offer_search_api(flight_req_id):
             # Создаем предложение рейса
             offer = FlightOffer(
                 flightRequest=flight_req,
+                adults_count=flight_req.adults,
                 dep_duration=segment1['departure']['at'],
                 arr_duration=segment_last['arrival']['at'],
                 duration=duration,
                 currencyCode=flight['price']['currency'],
                 totalPrice=flight['price']['total'],
-                data=flight
+                data=flight,
             )
+            # Проверяем наличие атрибутов children и infants у объекта flight_req
+            if hasattr(flight_req, 'children') and flight_req.children is not None:
+                offer.children_count = flight_req.children
+            if hasattr(flight_req, 'infants') and flight_req.infants is not None:
+                offer.infants_count = flight_req.infants
             offer.save()
             
             # Обрабатываем каждый сегмент рейса
@@ -237,6 +243,16 @@ def get_structured_flight_offers(request):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+def transform_airport(airport):
+    airport = list(airport)
+    for i in range(1, len(airport)):
+        if airport[i - 1] == ' ':
+            continue
+        airport[i] = airport[i].lower()
+    airport = ''.join(airport)
+    return airport
+
+
 def search_airports(request):
     """
     API для поиска аэропортов по ключевому слову через Amadeus API
@@ -251,26 +267,21 @@ def search_airports(request):
             }, status=400)
         
         # Выполняем запрос к Amadeus API для поиска аэропортов
-        response = c.reference_data.locations.get(keyword=keyword, subType=amadeus.Location.ANY, view='LIGHT')
-        
+        response = c.reference_data.locations.get(keyword=keyword, subType=amadeus.Location.AIRPORT)
+
         # Проверяем статус ответа
         if response.data:
             data = response.data
-            
             # Форматируем результаты для удобного использования на фронтенде
             airports = []
-            if 'data' in data:
-                for item in data['data']:
+            if len(data) > 0:
+                for item in data:
+
                     airport = {
-                        'id': item['id'],
-                        'name': item['name'],
                         'iataCode': item['iataCode'],
-                        'cityName': item.get('address', {}).get('cityName', ''),
-                        'countryName': item.get('address', {}).get('countryName', ''),
-                        'type': item['subType']
+                        'cityName': transform_airport(item['address']['cityName'])
                     }
                     airports.append(airport)
-            
             return JsonResponse({
                 'success': True,
                 'airports': airports
@@ -289,7 +300,7 @@ def search_airports(request):
             'error': str(e)
         }, status=500)
 
-'''
+
 def check_flight_price(request, offer_id):
     """
     API для проверки актуальной цены рейса через Amadeus API
@@ -297,39 +308,15 @@ def check_flight_price(request, offer_id):
     try:
         # Получаем предложение по ID
         offer = FlightOffer.objects.get(id=offer_id)
-        
+        print(offer)
         # Формируем параметры для запроса
-        
-        params = {
-            'originLocationCode': origin,
-            'destinationLocationCode': destination,
-            'departureDate': departure_date,
-            'adults': adults,
-            'max': 1  # Получаем только одно предложение
-        }
-        
-        # Если есть дата возвращения, добавляем её в параметры
-        if flight_request.returnDate:
-            params['returnDate'] = flight_request.returnDate.strftime('%Y-%m-%d')
-        
-        # Добавляем дополнительные параметры, если они есть
-        if flight_request.children:
-            params['children'] = flight_request.children
-        if flight_request.infants:
-            params['infants'] = flight_request.infants
-        if flight_request.travalClass:  # Обратите внимание на опечатку в имени поля
-            params['travelClass'] = flight_request.travalClass
-        if flight_request.currencyCode:
-            params['currencyCode'] = flight_request.currencyCode
-
-        # Получаем токен доступа к Amadeus API
-        params = {'data': {'type': 'flight-offers-pricing', 'flightOffers': [offer.data]}}
-        response = c.shopping.flight_offers.pricing.post(offer.data)
-        print(response.data)
-        
+        #params = {'data': {'type': 'flight-offers-pricing', 'flightOffers': [offer.data]}}
+        try:
+            response = c.shopping.flight_offers.pricing.post(offer.data)
+        except Exception as e:
+            print(e)
         # Проверяем статус ответа
         if response:
-            
             # Проверяем, есть ли предложения в ответе
             if 'flightOffers' in response.data and len(response.data['flightOffers']) > 0:
                 # Получаем актуальную цену
@@ -344,6 +331,7 @@ def check_flight_price(request, offer_id):
                 price_diff = current_price - old_price
                 
                 # Получаем дополнительную информацию о рейсе для корректного отображения карточки
+                '''
                 segments = FlightSegment.objects.filter(offer=offer)
                 segments_data = []
                 
@@ -402,14 +390,13 @@ def check_flight_price(request, offer_id):
                         'duration': str(sum([segment.duration for segment in segments if segment.duration], datetime.timedelta()))
                     }]
                 }
-                
+                '''
                 return JsonResponse({
                     'success': True,
                     'price': current_price,
                     'old_price': old_price,
                     'price_diff': price_diff,
                     'currency': offer.currencyCode or 'EUR',
-                    'flight': flight_data
                 })
             else:
                 # Если предложений нет, удаляем из кэша и перенаправляем на страницу поиска
@@ -453,7 +440,7 @@ def check_flight_price(request, offer_id):
             'error': str(e)
         }, status=500)
 
-'''
+
 def create_flight_order(request, offer_id):
     """
     API endpoint для создания заказа через Amadeus Flight Create Orders
@@ -569,8 +556,8 @@ def get_flight_details(request, offer_id):
             
             try:
                 # Получаем информацию об аэропортах
-                departure_airport = get_airport_info(segment.dep_iataCode)
-                arrival_airport = get_airport_info(segment.arr_iataCode)
+                departure_airport = c.reference_data.locations.get(keyword=segment.dep_iataCode, subType=amadeus.Location.AIRPORT).data[0]
+                arrival_airport = c.reference_data.locations.get(keyword=segment.arr_iataCode, subType=amadeus.Location.AIRPORT).data[0]
                 
                 # Форматируем даты безопасным способом
                 departure_at = None
@@ -595,16 +582,16 @@ def get_flight_details(request, offer_id):
                     'id': segment.id,
                     'departure': {
                         'iataCode': segment.dep_iataCode or '',
-                        'airport': departure_airport.get('name', segment.dep_airport or 'Неизвестный аэропорт'),
-                        'city': departure_airport.get('city', 'Неизвестный город'),
-                        'country': departure_airport.get('country', 'Неизвестная страна'),
+                        'airport': departure_airport.name,
+                        'city': departure_airport.addresses.cityName,
+                        'country': departure_airport.addresses.countryName,
                         'at': departure_at
                     },
                     'arrival': {
                         'iataCode': segment.arr_iataCode or '',
-                        'airport': arrival_airport.get('name', segment.arr_airport or 'Неизвестный аэропорт'),
-                        'city': arrival_airport.get('city', 'Неизвестный город'),
-                        'country': arrival_airport.get('country', 'Неизвестная страна'),
+                        'airport': arrival_airport.name,
+                        'city': arrival_airport.addresses.cityName,
+                        'country': arrival_airport.addresses.countryName,
                         'at': arrival_at
                     },
                     'carrierCode': segment.carrierCode or '',

@@ -30,7 +30,7 @@ document.addEventListener('DOMContentLoaded', function() {
         })
         .done(function(data) {
             resultsList.innerHTML = '';
-            
+
             if (!data.success) {
                 console.error('Error:', data.error);
                 const errorItem = document.createElement('div');
@@ -44,10 +44,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 data.airports.forEach(airport => {
                     const item = document.createElement('div');
                     item.className = 'airport-item';
-                    // Формируем информативное отображение аэропорта
                     const cityInfo = airport.cityName ? `${airport.cityName}, ` : '';
-                    const countryInfo = airport.countryName ? airport.countryName : '';
-                    item.innerHTML = `<strong>${airport.iataCode}</strong> - ${airport.name} ${cityInfo}${countryInfo}`;
+                    item.innerHTML = `<strong>${airport.iataCode}</strong> - ${cityInfo}`;
                     
                     item.addEventListener('click', function() {
                         if (resultsList === originList) {
@@ -253,7 +251,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Проверяем, есть ли результаты поиска в сессии при загрузке страницы
-    if (document.getElementById('flightResults')) {
-        fetchFlightOffers();
-    }
+    //if (document.getElementById('flightResults')) {
+      //  fetchFlightOffers();
+    //}
 });

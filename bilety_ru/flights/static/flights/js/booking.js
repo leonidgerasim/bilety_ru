@@ -143,7 +143,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Функция для проверки актуальности цены
-    /*
+
     function checkCurrentPrice() {
         // Показываем оверлей загрузки
         const loadingOverlay = document.getElementById('loadingOverlay');
@@ -152,15 +152,14 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         fetch(`/api/check-price/${offerId}/`)
-            .then(response => response.json())
-            .then(data => {
-                // Скрываем оверлей загрузки
-                if (loadingOverlay) {
-                    loadingOverlay.style.display = 'none';
-                }
+            .then(response => {            
+            // Скрываем оверлей загрузки
+            if (loadingOverlay) {
+                loadingOverlay.style.display = 'none';
+            }
                 
                 // Проверяем, нужно ли перенаправить пользователя
-                if (!data.success && data.redirect) {
+                if (!response.success && response.redirect) {
                     // Показываем уведомление о том, что рейс не найден
                     alert('Рейс не найден или больше недоступен. Вы будете перенаправлены на страницу поиска.');
                     
@@ -168,13 +167,13 @@ document.addEventListener('DOMContentLoaded', function() {
                     clearInterval(priceCheckTimer);
                     
                     // Перенаправляем на страницу поиска
-                    window.location.href = data.redirect_url || '/';
+                    window.location.href = response.redirect_url || '/';
                     return;
                 }
                 
                 // Обрабатываем ошибки
-                if (data.error && !data.redirect) {
-                    console.error('Error:', data.error);
+                if (response.error && !response.redirect) {
+                    console.error('Error:', response.error);
                     return;
                 }
                 
@@ -183,8 +182,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 const currentPrice = parseFloat(currentPriceText.replace(/[^0-9.]/g, ''));
                 
                 // Получаем новую цену
-                const newPrice = parseFloat(data.price);
-                const currencyCode = data.currency;
+                const newPrice = parseFloat(response.price);
+                const currencyCode = response.currency;
                 
                 // Если цена изменилась, обновляем информацию
                 if (newPrice !== currentPrice) {
@@ -226,16 +225,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.error('Error checking price:', error);
             });
     }
-    */
+
     // Загружаем информацию о рейсе при загрузке страницы
     loadFlightDetails();
     
     // Запускаем первую проверку цены с задержкой в 3 секунды,
     // чтобы сначала загрузилась информация о рейсе
-    //setTimeout(checkCurrentPrice, 3000);
+    setTimeout(checkCurrentPrice, 3000);
 
     // Устанавливаем интервал для периодической проверки
-    //priceCheckTimer = setInterval(checkCurrentPrice, priceCheckInterval);
+    priceCheckTimer = setInterval(checkCurrentPrice, priceCheckInterval);
     
     // Валидация формы перед отправкой
     document.getElementById('bookingForm').addEventListener('submit', function(e) {

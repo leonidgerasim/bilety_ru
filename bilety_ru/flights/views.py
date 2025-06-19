@@ -24,7 +24,7 @@ class OffersSearch(FormView):
     def get_initial(self):
         # Получаем начальные значения для формы из последнего поискового запроса пользователя
         initial = super().get_initial()
-        
+    
         # Проверяем наличие сессии
         if not self.request.session.session_key:
             self.request.session.create()
@@ -44,13 +44,14 @@ class OffersSearch(FormView):
                          'nonStop', 'maxPrice']:
                 if hasattr(last_request, field) and getattr(last_request, field) is not None:
                     initial[field] = getattr(last_request, field)
-        
-        return initial
 
+        return initial
+    
     def form_valid(self, form):
         flight_request = form.save(commit=False)
         
         # Проверяем наличие сессии
+
         if not self.request.session.session_key:
             self.request.session.create()
             
@@ -69,6 +70,7 @@ class OffersSearch(FormView):
         
         # Запускаем поиск предложений через API
         # Используем кэширование для уменьшения нагрузки на API
+        '''
         from django.core.cache import cache
         cache_key = f"flight_search_{flight_request.originLocationCode}_{flight_request.destinationLocationCode}_{flight_request.departureDate}"
         
@@ -119,21 +121,11 @@ class OffersSearch(FormView):
             except Exception as e:
                 print(f"Ошибка при использовании кэшированных результатов: {e}")
                 search_success = False
-        
+        '''
         # Если кэшированные результаты не найдены или произошла ошибка, выполняем новый поиск
-        if not search_success:
+        #if not search_success:
             # Выполняем новый поиск через API
-            search_success = offer_search_api(flight_request.id)
-            
-            # Если поиск успешен, сохраняем ID предложений в кэш
-            if search_success:
-                # Получаем ID всех предложений для этого запроса
-                offer_ids = list(FlightOffer.objects.filter(flightRequest=flight_request).values_list('id', flat=True))
-                if offer_ids:
-                    # Сохраняем ID предложений в кэш на 15 минут
-                    cache.set(cache_key, offer_ids, 60 * 15)  # 15 минут
-                    print(f"Сохранены новые результаты в кэш для запроса {flight_request.id}")
-        
+        search_success = offer_search_api(flight_request.id)
         # Если запрос AJAX, возвращаем JSON-ответ
         if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return JsonResponse({'success': search_success})
@@ -148,24 +140,11 @@ class OffersSearch(FormView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         
-        # Проверяем наличие сессии
-        if not self.request.session.session_key:
-            self.request.session.create()
-            
-        session_key = self.request.session.session_key
-        
-        # Получаем историю поисковых запросов для текущей сессии
-        search_history = FlightRequest.objects.filter(
-            session_key=session_key
-        ).order_by('-created_at')[:5]  # Показываем последние 5 запросов
-        
-        context['search_history'] = search_history
-        context['has_search_history'] = search_history.exists()
         
         # Получаем результаты последнего поиска
         if 'id_offer_search' in self.request.session:
             try:
-                flight_req = FlightRequest.objects.filter(id=self.request.session['id_offer_search']).first()
+                flight_req = FlightRequest.objects.filter(id=self.request.session['id_offer_search']).last()
                 if flight_req:
                     context['offers'] = FlightOffer.objects.filter(flightRequest=flight_req)
                     context['segments'] = FlightSegment.objects.all()
