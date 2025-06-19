@@ -1,15 +1,15 @@
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404
 from .forms import OfferSearchForm
 from django.shortcuts import render, redirect, HttpResponseRedirect, reverse, HttpResponse
 from .models import FlightOffer, FlightRequest, FlightSegment
 from django.views.generic.edit import CreateView, View, FormView
-# from rest_framework.views import APIView, status
-# from rest_framework.response import Response
+from django.views.generic import TemplateView
 from django.contrib import messages
 import amadeus
 from django.http import JsonResponse
 import datetime
-from .flight import Flight
+import json
+from api.views import get_cities, offer_search_api, create_flight_order
 
 
 c = amadeus.Client(client_id='1otgEUauKpjxxGPcPxSQvvsRz7o3fxv1',
@@ -19,91 +19,374 @@ c = amadeus.Client(client_id='1otgEUauKpjxxGPcPxSQvvsRz7o3fxv1',
 class OffersSearch(FormView):
     template_name = 'flights/search.html'
     form_class = OfferSearchForm
-    success_url = ''
+    success_url = '/'
+
+    def get_initial(self):
+        # Получаем начальные значения для формы из последнего поискового запроса пользователя
+        initial = super().get_initial()
+        
+        # Проверяем наличие сессии
+        if not self.request.session.session_key:
+            self.request.session.create()
+            
+        session_key = self.request.session.session_key
+        
+        # Ищем последний поисковый запрос для текущей сессии
+        last_request = FlightRequest.objects.filter(
+            session_key=session_key
+        ).order_by('-created_at').first()
+        
+        if last_request:
+            # Заполняем форму данными из последнего запроса
+            for field in ['originLocationCode', 'destinationLocationCode', 'departureDate', 
+                         'returnDate', 'adults', 'children', 'infants', 'currencyCode',
+                         'cabin', 'includedAirlines', 'excludedAirlines', 'travalClass',
+                         'nonStop', 'maxPrice']:
+                if hasattr(last_request, field) and getattr(last_request, field) is not None:
+                    initial[field] = getattr(last_request, field)
+        
+        return initial
 
     def form_valid(self, form):
-        # func = lambda date: date if date is not None else None
         flight_request = form.save(commit=False)
-        if self.request.user.is_authentificated:
+        
+        # Проверяем наличие сессии
+        if not self.request.session.session_key:
+            self.request.session.create()
+            
+        # Сохраняем данные пользователя и сессии
+        if self.request.user.is_authenticated:
             flight_request.user = self.request.user
-        flight_request.session = self.request.session.session_key
-        # form_data = {
-        #     'currencyCode': form.cleaned_data['currencyCode'],
-        #     'originCity': self.request.POST['originCity'],
-        #     'destinationCity': self.request.POST['destinationCity'],
-        #     'departureDate': (form.cleaned_data['departureDate'].year,
-        #                       form.cleaned_data['departureDate'].month,
-        #                       form.cleaned_data['departureDate'].day),
-        #     'adults': form.cleaned_data['adults'],
-        # }
-        # if 'returnDate' in form.cleaned_data:
-        #     form_data['returnDate'] = (form.cleaned_data['returnDate'].year,
-        #                                form.cleaned_data['returnDate'].month,
-        #                                form.cleaned_data['returnDate'].day)
+        flight_request.session_key = self.request.session.session_key  # Новое поле
+        
+        # Обрабатываем коды аэропортов
+        flight_request.originLocationCode = flight_request.originLocationCode[:3].upper()
+        flight_request.destinationLocationCode = flight_request.destinationLocationCode[:3].upper()
+        
+        # Сохраняем запрос и устанавливаем его ID в сессию
+        flight_request.save()
         self.request.session['id_offer_search'] = flight_request.id
+        
+        # Запускаем поиск предложений через API
+        # Используем кэширование для уменьшения нагрузки на API
+        from django.core.cache import cache
+        cache_key = f"flight_search_{flight_request.originLocationCode}_{flight_request.destinationLocationCode}_{flight_request.departureDate}"
+        
+        # Проверяем наличие кэшированных результатов
+        cached_offers = cache.get(cache_key)
+        search_success = False
+        
+        if cached_offers:
+            try:
+                # Если есть кэшированные результаты, копируем их для нового запроса
+                # Получаем предложения из кэша
+                cached_flight_offers = FlightOffer.objects.filter(id__in=cached_offers)
+                
+                if cached_flight_offers.exists():
+                    # Для каждого предложения создаем копию с новым запросом
+                    for cached_offer in cached_flight_offers:
+                        # Создаем новое предложение на основе кэшированного
+                        new_offer = FlightOffer(
+                            flightRequest=flight_request,
+                            dep_duration=cached_offer.dep_duration,
+                            arr_duration=cached_offer.arr_duration,
+                            duration=cached_offer.duration,
+                            currencyCode=cached_offer.currencyCode,
+                            totalPrice=cached_offer.totalPrice,
+                            data=cached_offer.data
+                        )
+                        new_offer.save()
+                        
+                        # Копируем сегменты рейса
+                        for segment in FlightSegment.objects.filter(offer=cached_offer):
+                            FlightSegment(
+                                offer=new_offer,
+                                dep_iataCode=segment.dep_iataCode,
+                                dep_airport=segment.dep_airport,
+                                dep_dateTime=segment.dep_dateTime,
+                                arr_iataCode=segment.arr_iataCode,
+                                arr_airport=segment.arr_airport,
+                                arr_dateTime=segment.arr_dateTime,
+                                carrierCode=segment.carrierCode,
+                                duration=segment.duration
+                            ).save()
+                    
+                    search_success = True
+                    print(f"Использованы кэшированные результаты для запроса {flight_request.id}")
+                else:
+                    # Если кэшированные предложения не найдены, выполняем новый поиск
+                    search_success = False
+            except Exception as e:
+                print(f"Ошибка при использовании кэшированных результатов: {e}")
+                search_success = False
+        
+        # Если кэшированные результаты не найдены или произошла ошибка, выполняем новый поиск
+        if not search_success:
+            # Выполняем новый поиск через API
+            search_success = offer_search_api(flight_request.id)
+            
+            # Если поиск успешен, сохраняем ID предложений в кэш
+            if search_success:
+                # Получаем ID всех предложений для этого запроса
+                offer_ids = list(FlightOffer.objects.filter(flightRequest=flight_request).values_list('id', flat=True))
+                if offer_ids:
+                    # Сохраняем ID предложений в кэш на 15 минут
+                    cache.set(cache_key, offer_ids, 60 * 15)  # 15 минут
+                    print(f"Сохранены новые результаты в кэш для запроса {flight_request.id}")
+        
+        # Если запрос AJAX, возвращаем JSON-ответ
+        if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'success': search_success})
+        
         return HttpResponseRedirect(reverse('flights:home'))
 
     def form_invalid(self, form):
-        return HttpResponse('Ошибка')
+        if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'success': False, 'errors': form.errors})
+        return render(self.request, self.template_name, {'form': form})
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        # if 'form_data' in self.request.session:
-        #     form_data = self.request.session['form_data']
-        #     kwargs = {
-        #         'currencyCode': form_data['currencyCode'],
-        #         'originLocationCode': form_data['originCity'][0:3],
-        #         'destinationLocationCode': form_data['destinationCity'][0:3],
-        #         'departureDate': datetime.date(int(form_data['departureDate'][0]),
-        #                                        int(form_data['departureDate'][1]),
-        #                                        int(form_data['departureDate'][2])),
-        #         'adults': int(form_data['adults']),
-        #         'max': 3,
-        #     }
-        #     if form_data['returnDate']:
-        #         kwargs['returnDate'] = datetime.date(int(form_data['returnDate'][0]),
-        #                                         int(form_data['returnDate'][1]),
-        #                                         int(form_data['returnDate'][2])),
-        #     context['form'] = OfferSearchForm(initial=f)
-        #     context['form_data'] = f
-        #     #context['response'] = offer_search_api(self.request, **kwargs)
-        # if 'id_offer_search' in self.request.session:
-        #     context['form'] = OfferSearchForm(data=OffersSearch.objects.get(id=self.request.session['id_offer_search']))
-        #     context['f_req'] = OffersSearch.objects.get(id=self.request.session['id_offer_search'])
-        #     context['f_requests'] = OffersSearch.objects.all()
+        
+        # Проверяем наличие сессии
+        if not self.request.session.session_key:
+            self.request.session.create()
+            
+        session_key = self.request.session.session_key
+        
+        # Получаем историю поисковых запросов для текущей сессии
+        search_history = FlightRequest.objects.filter(
+            session_key=session_key
+        ).order_by('-created_at')[:5]  # Показываем последние 5 запросов
+        
+        context['search_history'] = search_history
+        context['has_search_history'] = search_history.exists()
+        
+        # Получаем результаты последнего поиска
         if 'id_offer_search' in self.request.session:
-            flight_req = FlightRequest.objects.filter(session=self.request.session.session_key).last()
-            context['offers'] = FlightOffer.objects.filter(flightRequest=flight_req)
-            context['segments'] = FlightSegment.objects.all()
+            try:
+                flight_req = FlightRequest.objects.filter(id=self.request.session['id_offer_search']).first()
+                if flight_req:
+                    context['offers'] = FlightOffer.objects.filter(flightRequest=flight_req)
+                    context['segments'] = FlightSegment.objects.all()
+                    context['last_search'] = flight_req
+            except Exception as e:
+                # Логируем ошибку, но не позволяем ей прервать выполнение
+                print(f"Ошибка при получении результатов поиска: {e}")
+                # Удаляем некорректный ID из сессии
+                if 'id_offer_search' in self.request.session:
+                    del self.request.session['id_offer_search']
+                    self.request.session.save()
+        
         return context
 
 
-def get_cities(request):
-    query = request.GET.get("query", None)  # Получаем введённый текст
-    try:
-        data = c.reference_data.locations.get(keyword=query, subType=amadeus.Location.ANY).data
-    except amadeus.ResponseError as error:
-        messages.add_message(request, messages.ERROR, error)
-    data = c.reference_data.locations.get(keyword=query, subType=amadeus.Location.ANY).data
-    result = []
-    for i, val in enumerate(data):
-        result.append(data[i]['iataCode']+', '+data[i]['name'])
-    return JsonResponse(result, safe=False)
+class ClearSearchHistoryView(View):
+    """
+    Представление для очистки истории поисковых запросов пользователя
+    """
+    def post(self, request, *args, **kwargs):
+        # Проверяем наличие сессии
+        if not request.session.session_key:
+            request.session.create()
+            
+        session_key = request.session.session_key
+        
+        # Удаляем все поисковые запросы для текущей сессии
+        FlightRequest.objects.filter(session_key=session_key).delete()
+        
+        # Если запрос AJAX, возвращаем JSON-ответ
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'success': True})
+        
+        # Перенаправляем на главную страницу
+        return HttpResponseRedirect(reverse('flights:home'))
 
 
-def offer_search_api(request, **kwargs):
-    try:
-        search_flights = c.shopping.flight_offers_search.get(**kwargs)
-    except amadeus.ResponseError as error:
-        messages.add_message(
-            request, messages.ERROR, error.response.result["errors"][0]["detail"]
-        )
-    search_flights_returned = []
-    search_flights = c.shopping.flight_offers_search.get(**kwargs)
-    response = ""
-    for flight in search_flights.data:
-        offer = Flight(flight).construct_flights()
-        search_flights_returned.append(offer)
-        response = zip(search_flights_returned, search_flights.data)
-    return response
+class BookingView(TemplateView):
+    template_name = 'flights/booking.html'
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        offer_id = self.kwargs.get('offer_id')
+        try:
+            offer = FlightOffer.objects.get(id=offer_id)
+            context['flight_offer'] = offer
+            
+            # Получаем сегменты рейса
+            segments = FlightSegment.objects.filter(offer=offer)
+            context['segments'] = segments
+            
+            # Получаем информацию о количестве пассажиров
+            flight_request = offer.flightRequest
+            adults = flight_request.adults
+            children = flight_request.children or 0
+            infants = flight_request.infants or 0
+            
+            # Добавляем в контекст количество пассажиров
+            context['adults'] = adults
+            context['children'] = children
+            context['infants'] = infants
+            
+            # Добавляем диапазоны для циклов в шаблоне
+            context['adults_range'] = range(1, adults + 1)
+            context['children_range'] = range(1, children + 1)
+            context['infants_range'] = range(1, infants + 1)
+            
+            # Также можно проверить данные о пассажирах в JSON поле data предложения
+            if offer.data and 'travelerPricings' in offer.data:
+                context['traveler_pricings'] = offer.data['travelerPricings']
+                context['traveler_count'] = len(offer.data['travelerPricings'])
+            
+        except FlightOffer.DoesNotExist:
+            context['error'] = 'Предложение не найдено'
+        return context
+        
+    def post(self, request, *args, **kwargs):
+        offer_id = self.kwargs.get('offer_id')
+        actual_price = request.POST.get('actualPrice')
+        
+        try:
+            offer = FlightOffer.objects.get(id=offer_id)
+            
+            # Проверяем, изменилась ли цена
+            if actual_price and float(actual_price) != float(offer.totalPrice):
+                # Обновляем цену в базе данных
+                offer.totalPrice = actual_price
+                offer.save()
+            
+            # Обрабатываем данные формы
+            form_data = request.POST
+            
+            # Собираем данные о пассажирах
+            passengers = []
+            adults_count = int(form_data.get('adults_count', 0))
+            children_count = int(form_data.get('children_count', 0))
+            infants_count = int(form_data.get('infants_count', 0))
+            
+            # Проверяем данные о пассажирах в JSON поле data предложения
+            traveler_types = {}
+            if offer.data and 'travelerPricings' in offer.data:
+                for i, traveler in enumerate(offer.data['travelerPricings']):
+                    traveler_type = traveler.get('travelerType', '')
+                    if traveler_type not in traveler_types:
+                        traveler_types[traveler_type] = 0
+                    traveler_types[traveler_type] += 1
+                
+                # Проверяем, что количество пассажиров совпадает
+                expected_adults = traveler_types.get('ADULT', 0)
+                expected_children = traveler_types.get('CHILD', 0)
+                expected_infants = traveler_types.get('HELD_INFANT', 0) + traveler_types.get('SEATED_INFANT', 0)
+                
+                if adults_count != expected_adults or children_count != expected_children or infants_count != expected_infants:
+                    # Если не совпадает, можно логировать или предупредить
+                    print(f"Warning: Passenger count mismatch. Form: {adults_count}/{children_count}/{infants_count}, Expected: {expected_adults}/{expected_children}/{expected_infants}")
+            
+            # Собираем данные о взрослых пассажирах
+            for i in range(1, adults_count + 1):
+                passenger = {
+                    'id': i,
+                    'type': 'ADULT',
+                    'firstName': form_data.get(f'adult_{i}_first_name', ''),
+                    'lastName': form_data.get(f'adult_{i}_last_name', ''),
+                    'dateOfBirth': form_data.get(f'adult_{i}_dob', ''),
+                    'gender': form_data.get(f'adult_{i}_gender', ''),
+                    'documentType': form_data.get(f'adult_{i}_document_type', ''),
+                    'documentNumber': form_data.get(f'adult_{i}_document_number', '')
+                }
+                passengers.append(passenger)
+            
+            # Собираем данные о детях
+            for i in range(1, children_count + 1):
+                passenger = {
+                    'id': adults_count + i,
+                    'type': 'CHILD',
+                    'firstName': form_data.get(f'child_{i}_first_name', ''),
+                    'lastName': form_data.get(f'child_{i}_last_name', ''),
+                    'dateOfBirth': form_data.get(f'child_{i}_dob', ''),
+                    'gender': form_data.get(f'child_{i}_gender', '')
+                }
+                passengers.append(passenger)
+            
+            # Собираем данные о младенцах
+            for i in range(1, infants_count + 1):
+                passenger = {
+                    'id': adults_count + children_count + i,
+                    'type': 'INFANT',
+                    'firstName': form_data.get(f'infant_{i}_first_name', ''),
+                    'lastName': form_data.get(f'infant_{i}_last_name', ''),
+                    'dateOfBirth': form_data.get(f'infant_{i}_dob', ''),
+                    'gender': form_data.get(f'infant_{i}_gender', '')
+                }
+                passengers.append(passenger)
+            
+            # Получаем контактные данные
+            contact_email = form_data.get('contact_email', '')
+            contact_phone = form_data.get('contact_phone', '')
+            
+            # Создаем запись о бронировании
+            from flights.models import Booking
+            
+            booking = Booking(
+                offer=offer,
+                total_price=offer.totalPrice,
+                currency_code=offer.currencyCode,
+                passenger_data={'passengers': passengers},
+                contact_email=contact_email,
+                contact_phone=contact_phone
+            )
+            
+            # Если пользователь авторизован, связываем бронирование с ним
+            if request.user.is_authenticated:
+                booking.user = request.user
+            else:
+                # Иначе используем ключ сессии
+                booking.session_key = request.session.session_key
+            
+            booking.save()
+            
+            # Перенаправляем на страницу успешного бронирования
+            from django.urls import reverse
+            from django.http import HttpResponseRedirect
+            return HttpResponseRedirect(reverse('flights:booking_success', kwargs={'booking_id': booking.id}))
+            
+        except FlightOffer.DoesNotExist:
+            context = self.get_context_data(**kwargs)
+            context['error'] = 'Предложение не найдено'
+            return self.render_to_response(context)
+        except Exception as e:
+            context = self.get_context_data(**kwargs)
+            context['error'] = f'Ошибка при обработке бронирования: {str(e)}'
+            return self.render_to_response(context)
 
+
+class BookingSuccessView(TemplateView):
+    template_name = 'flights/booking_success.html'
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        booking_id = self.kwargs.get('booking_id')
+        
+        try:
+            from flights.models import Booking
+            booking = Booking.objects.get(id=booking_id)
+            
+            # Добавляем информацию о бронировании в контекст
+            context['booking'] = booking
+            context['offer'] = booking.offer
+            
+            # Получаем сегменты рейса
+            segments = FlightSegment.objects.filter(offer=booking.offer)
+            context['segments'] = segments
+            
+            # Получаем данные о пассажирах
+            context['passengers'] = booking.passenger_data.get('passengers', [])
+            
+            # Если пользователь авторизован, проверяем, что бронирование принадлежит ему
+            if self.request.user.is_authenticated and booking.user and booking.user != self.request.user:
+                context['error'] = 'У вас нет доступа к этому бронированию'
+                
+        except Exception as e:
+            context['error'] = f'Бронирование не найдено или произошла ошибка: {str(e)}'
+            
+        return context

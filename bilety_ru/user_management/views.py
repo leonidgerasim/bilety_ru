@@ -6,14 +6,15 @@ from .forms import SignUpForm, SignInForm
 from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.urls import reverse_lazy
 
 # Create your views here.
 
 
-class SignUpView(FormView):
+class SignUpView(CreateView):
     template_name = 'user_management/signup.html'
     form_class = SignUpForm
-    success_url = 'user_management/signup'
+    success_url = reverse_lazy('flights:home')
 
     def get(self, request, *args, **kwargs):
         if request.user.is_authenticated:
@@ -22,56 +23,78 @@ class SignUpView(FormView):
             return super().get(request, *args, **kwargs)
 
     def form_valid(self, form):
-        request = self.request
-        f = form.save(commit=False)
-        username = form.cleaned_data.get('first_name') + ' ' + form.cleaned_data.get('last_name')
-        f.username = username
-        f.save()
-        user = authenticate(username=username,
-                            password=form.cleaned_data.get('password1'))
-        login(request, user)
-        return HttpResponseRedirect(reverse('user_management:index'))
+        response = super().form_valid(form)
+        # Автоматически авторизуем пользователя после регистрации
+        username = form.cleaned_data.get('username')
+        password = form.cleaned_data.get('password1')
+        user = authenticate(self.request, username=username, password=password)
+        if user is not None:
+            login(self.request, user)
+            messages.success(self.request, f'Добро пожаловать, {user.first_name}! Вы успешно зарегистрированы.')
+        return response
 
     def form_invalid(self, form):
+        messages.error(self.request, 'Пожалуйста, исправьте ошибки в форме.')
         return super().form_invalid(form)
 
 
 class SignInView(FormView):
     template_name = 'user_management/auth.html'
     form_class = SignInForm
-    success_url = 'user_management/'
+    success_url = reverse_lazy('flights:home')
 
     def get(self, request, *args, **kwargs):
         if request.user.is_authenticated:
-            return redirect('/')
+            return redirect('flights:home')
         else:
             return super().get(request, *args, **kwargs)
 
     def form_valid(self, form):
-        username = form.cleaned_data['first_name'] + ' ' + form.cleaned_data['last_name']
-        user = authenticate(username=username,
-                            password=form.cleaned_data.get('password'))
+        username = form.cleaned_data.get('username')
+        password = form.cleaned_data.get('password')
+        user = authenticate(self.request, username=username, password=password)
         if user is not None:
             login(self.request, user)
-            return HttpResponseRedirect(reverse('user_management:index'))
+            messages.success(self.request, f'Добро пожаловать, {user.first_name}!')
+            # Перенаправляем на страницу, с которой пользователь пришел, если есть
+            next_page = self.request.GET.get('next')
+            if next_page:
+                return redirect(next_page)
+            return redirect(self.success_url)
         else:
-            return HttpResponse('user')
+            messages.error(self.request, 'Неверное имя пользователя или пароль.')
+            return self.form_invalid(form)
 
     def form_invalid(self, form):
-        return redirect('/')
+        messages.error(self.request, 'Неверное имя пользователя или пароль.')
+        return super().form_invalid(form)
 
 
 class LogOutView(View):
-
     def get(self, request):
         logout(request)
-        return HttpResponseRedirect(reverse('user_management:index'))
+        messages.success(request, 'Вы успешно вышли из системы.')
+        return redirect('flights:home')
+
+
+@login_required
+def profile(request):
+    """Страница профиля пользователя"""
+    from flights.models import FlightRequest
+    
+    # Получаем историю поисков пользователя
+    flight_requests = FlightRequest.objects.filter(user=request.user).order_by('-created_at')[:10]
+    
+    context = {
+        'user': request.user,
+        'flight_requests': flight_requests
+    }
+    
+    return render(request, 'user_management/profile.html', context)
 
 
 def index(request):
-    context = {'users': User.objects.all(),
-               'user': request.user}
-    return render(request, 'user_management/auth.html', context)
-
-
-
+    """Главная страница управления пользователями"""
+    if request.user.is_authenticated:
+        return redirect('user_management:profile')
+    return redirect('user_management:signin')

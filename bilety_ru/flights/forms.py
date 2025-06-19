@@ -7,6 +7,31 @@ class OfferSearchForm(forms.ModelForm):
 
     currencyCode = forms.ChoiceField(choices=CURRENCY_CODES, initial='EUR', label='Валюта', widget=forms.Select())
     # returnDate = forms.DateField(required=False)
+    
+    # Добавляем виджеты для выбора количества пассажиров с ограничениями
+    adults = forms.IntegerField(
+        min_value=1, 
+        max_value=9, 
+        initial=1,
+        label='Взрослые (от 12 лет)',
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'min': '1', 'max': '9'})
+    )
+    children = forms.IntegerField(
+        min_value=0, 
+        max_value=9, 
+        initial=0,
+        required=False,
+        label='Дети (от 2 до 12 лет)',
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'min': '0', 'max': '9'})
+    )
+    infants = forms.IntegerField(
+        min_value=0, 
+        max_value=9, 
+        initial=0,
+        required=False,
+        label='Младенцы (до 2 лет)',
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'min': '0', 'max': '9'})
+    )
 
     class Meta:
         model = FlightRequest
@@ -15,14 +40,15 @@ class OfferSearchForm(forms.ModelForm):
                   'destinationLocationCode',
                   'departureDate',
                   'returnDate',
-                  'adults')
+                  'adults',
+                  'children',
+                  'infants')
         labels = {
             'currencyCode': "Валюта",
             'originLocationCode': 'Аэропорт отправления',
             'destinationLocationCode': 'Аэропорт прибытия',
             'departureDate': 'Дата отправления',
             'returnDate': 'Дата возвращения',
-            'adults': 'Число взрослых пассажиров',
         }
         widgets = {
             'departureDate': forms.SelectDateWidget(),

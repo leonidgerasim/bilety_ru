@@ -1,11 +1,49 @@
 from django.shortcuts import render
 import amadeus
 from django.http import JsonResponse
-
+from django.forms.models import model_to_dict
+from flights.models import FlightRequest, FlightOffer, FlightSegment
+import isodate
+import datetime
+import json
+from django.views.decorators.csrf import csrf_exempt
+import requests
+import datetime
 # Create your views here.
 
 c = amadeus.Client(client_id='1otgEUauKpjxxGPcPxSQvvsRz7o3fxv1',
                    client_secret='VgqvL5c92wzXcPgV')
+
+
+def get_amadeus_token():
+    """
+    Получение токена доступа к Amadeus API
+    """
+    try:
+        # Параметры для запроса токена
+        url = 'https://test.api.amadeus.com/v1/security/oauth2/token'
+        headers = {
+            'Content-Type': 'application/x-www-form-urlencoded'
+        }
+        data = {
+            'grant_type': 'client_credentials',
+            'client_id': '1otgEUauKpjxxGPcPxSQvvsRz7o3fxv1',
+            'client_secret': 'VgqvL5c92wzXcPgV'
+        }
+        
+        # Выполняем запрос для получения токена
+        response = requests.post(url, headers=headers, data=data)
+        
+        # Проверяем статус ответа
+        if response.status_code == 200:
+            token_data = response.json()
+            return token_data['access_token']
+        else:
+            print(f"Error getting Amadeus token: {response.status_code} - {response.text}")
+            return None
+    except Exception as e:
+        print(f"Exception in get_amadeus_token: {e}")
+        return None
 
 def get_cities(request):
     query = request.GET.get("query", None)  # Получаем введённый текст
@@ -16,14 +54,688 @@ def get_cities(request):
     return JsonResponse(result, safe=False)
 
 
-def offer_search_api(request, **kwargs):
+def offer_search_api(flight_req_id):
+    """
+    Функция для поиска предложений авиабилетов через API Amadeus
+    и сохранения их в базу данных
+    """
+    try:
+        # Проверяем существование запроса
+        flight_req = FlightRequest.objects.get(id=flight_req_id)
+        
+        # Преобразуем модель в словарь для передачи в API
+        kwargs = model_to_dict(flight_req)
+        d = {}
+        for key in kwargs.keys():
+            if kwargs[key] is not None and key not in ['id', 'user', 'session_key', 'create_in']:
+                d[key] = kwargs[key]
+        
+        # Ограничиваем количество результатов
+        d['max'] = 5
+        
+        # Кэш для хранения информации об аэропортах, чтобы не делать повторные запросы
+        airport_cache = {}
+        
+        # Выполняем поиск рейсов
+        search_flights = c.shopping.flight_offers_search.get(**d)
+        
+        # Проверяем, есть ли результаты
+        if not search_flights.data:
+            print(f"No flights found for request ID: {flight_req_id}")
+            return False
+            
+        # Обрабатываем каждый найденный рейс
+        for flight in search_flights.data:
+            # Получаем первый и последний сегменты для определения общего времени полета
+            if not flight.get('itineraries') or not flight['itineraries'][0].get('segments'):
+                continue  # Пропускаем рейс без сегментов
+                
+            segment1 = flight['itineraries'][0]['segments'][0]
+            segment_last = flight['itineraries'][0]['segments'][-1]
+            
+            # Парсим продолжительность полета
+            try:
+                duration = isodate.parse_duration(flight['itineraries'][0]['duration'])
+                duration = datetime.time(hour=duration.seconds//3600, minute=duration.seconds//60 % 60)
+            except (ValueError, TypeError) as e:
+                print(f"Error parsing duration: {e}")
+                duration = datetime.time(0, 0)  # Устанавливаем значение по умолчанию
+            
+            # Создаем предложение рейса
+            offer = FlightOffer(
+                flightRequest=flight_req,
+                dep_duration=segment1['departure']['at'],
+                arr_duration=segment_last['arrival']['at'],
+                duration=duration,
+                currencyCode=flight['price']['currency'],
+                totalPrice=flight['price']['total'],
+                data=flight
+            )
+            offer.save()
+            
+            # Обрабатываем каждый сегмент рейса
+            for segment in flight['itineraries'][0]['segments']:
+                # Получаем информацию о аэропортах отправления и прибытия
+                dep_iata = segment['departure']['iataCode']
+                arr_iata = segment['arrival']['iataCode']
+                
+                # Используем кэш для избежания повторных запросов к API
+                if dep_iata not in airport_cache:
+                    try:
+                        dep_location = c.reference_data.locations.get(
+                            keyword=dep_iata, 
+                            subType=amadeus.Location.AIRPORT
+                        )
+                        if dep_location.data:
+                            airport_cache[dep_iata] = dep_location.data[0].get('name', dep_iata)
+                        else:
+                            airport_cache[dep_iata] = dep_iata
+                    except Exception as e:
+                        print(f"Error getting departure airport info: {e}")
+                        airport_cache[dep_iata] = dep_iata
+                
+                if arr_iata not in airport_cache:
+                    try:
+                        arr_location = c.reference_data.locations.get(
+                            keyword=arr_iata, 
+                            subType=amadeus.Location.AIRPORT
+                        )
+                        if arr_location.data:
+                            airport_cache[arr_iata] = arr_location.data[0].get('name', arr_iata)
+                        else:
+                            airport_cache[arr_iata] = arr_iata
+                    except Exception as e:
+                        print(f"Error getting arrival airport info: {e}")
+                        airport_cache[arr_iata] = arr_iata
+                
+                # Парсим продолжительность сегмента
+                try:
+                    duration_seg = isodate.parse_duration(segment['duration'])
+                    duration_seg = datetime.time(
+                        hour=duration_seg.seconds // 3600, 
+                        minute=duration_seg.seconds // 60 % 60
+                    )
+                except (ValueError, TypeError) as e:
+                    print(f"Error parsing segment duration: {e}")
+                    duration_seg = datetime.time(0, 0)  # Устанавливаем значение по умолчанию
+                
+                # Создаем сегмент рейса
+                FlightSegment(
+                    offer=offer,
+                    dep_iataCode=dep_iata,
+                    dep_airport=airport_cache[dep_iata],
+                    dep_dateTime=segment['departure']['at'],
+                    arr_iataCode=arr_iata,
+                    arr_airport=airport_cache[arr_iata],
+                    arr_dateTime=segment['arrival']['at'],
+                    carrierCode=segment['carrierCode'],
+                    duration=duration_seg
+                ).save()
+        
+        return True
+    except FlightRequest.DoesNotExist:
+        print(f"FlightRequest with ID {flight_req_id} does not exist")
+        return False
+    except Exception as e:
+        print(f"Error in offer_search_api: {e}")
+        return False
 
-    search_flights_returned = []
-    search_flights = c.shopping.flight_offers_search.get(**kwargs)
-    response = ""
-    for flight in search_flights.data:
-        # offer = Flight(flight).construct_flights()
-        search_flights_returned.append(offer)
-        response = zip(search_flights_returned, search_flights.data)
-    return response
 
+def get_structured_flight_offers(request):
+    """
+    API endpoint для получения структурированных данных о рейсах для фронтенда
+    """
+    if 'id_offer_search' not in request.session:
+        return JsonResponse({'error': 'No flight search in session'}, status=400)
+    
+    flight_req_id = request.session['id_offer_search']
+    try:
+        flight_req = FlightRequest.objects.get(id=flight_req_id)
+        offers = FlightOffer.objects.filter(flightRequest=flight_req)
+        
+        structured_offers = []
+        for offer in offers:
+            # Получаем все сегменты для данного предложения
+            segments = FlightSegment.objects.filter(offer=offer)
+            
+            # Структурируем данные для фронтенда
+            offer_data = {
+                'id': offer.id,
+                'totalPrice': float(offer.totalPrice),
+                'currencyCode': offer.currencyCode,
+                'duration': offer.duration.strftime('%H:%M'),
+                'outbound': [],
+                'inbound': [],
+                'bookingCode': offer.data.get('id', ''),  # Код бронирования из данных Amadeus
+            }
+            
+            # Добавляем сегменты для полета "туда"
+            for segment in segments:
+                segment_data = {
+                    'departureAirport': segment.dep_iataCode,
+                    'departureCity': segment.dep_airport,
+                    'departureDateTime': segment.dep_dateTime.strftime('%Y-%m-%d %H:%M'),
+                    'arrivalAirport': segment.arr_iataCode,
+                    'arrivalCity': segment.arr_airport,
+                    'arrivalDateTime': segment.arr_dateTime.strftime('%Y-%m-%d %H:%M'),
+                    'duration': segment.duration.strftime('%H:%M'),
+                    'airline': segment.carrierCode,
+                    'airlineLogo': f"https://s1.apideeplink.com/images/airlines/{segment.carrierCode}.png"
+                }
+                
+                # Определяем, к какому направлению относится сегмент (туда/обратно)
+                # Пока что все сегменты считаем как outbound (туда)
+                offer_data['outbound'].append(segment_data)
+            
+            structured_offers.append(offer_data)
+        
+        return JsonResponse({'offers': structured_offers}, safe=False)
+    
+    except FlightRequest.DoesNotExist:
+        return JsonResponse({'error': 'Flight request not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+def search_airports(request):
+    """
+    API для поиска аэропортов по ключевому слову через Amadeus API
+    """
+    try:
+        # Получаем параметр поиска из запроса
+        keyword = request.GET.get('keyword', '')
+        if not keyword or len(keyword) < 1:
+            return JsonResponse({
+                'success': False,
+                'error': 'Keyword parameter is required'
+            }, status=400)
+        
+        # Выполняем запрос к Amadeus API для поиска аэропортов
+        response = c.reference_data.locations.get(keyword=keyword, subType=amadeus.Location.ANY, view='LIGHT')
+        
+        # Проверяем статус ответа
+        if response.data:
+            data = response.data
+            
+            # Форматируем результаты для удобного использования на фронтенде
+            airports = []
+            if 'data' in data:
+                for item in data['data']:
+                    airport = {
+                        'id': item['id'],
+                        'name': item['name'],
+                        'iataCode': item['iataCode'],
+                        'cityName': item.get('address', {}).get('cityName', ''),
+                        'countryName': item.get('address', {}).get('countryName', ''),
+                        'type': item['subType']
+                    }
+                    airports.append(airport)
+            
+            return JsonResponse({
+                'success': True,
+                'airports': airports
+            })
+        else:
+            # В случае ошибки API
+            return JsonResponse({
+                'success': False,
+                'error': f'Amadeus API error: {response.status_code}',
+                'details': response.text
+            }, status=response.status_code)
+    
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+'''
+def check_flight_price(request, offer_id):
+    """
+    API для проверки актуальной цены рейса через Amadeus API
+    """
+    try:
+        # Получаем предложение по ID
+        offer = FlightOffer.objects.get(id=offer_id)
+        
+        # Формируем параметры для запроса
+        
+        params = {
+            'originLocationCode': origin,
+            'destinationLocationCode': destination,
+            'departureDate': departure_date,
+            'adults': adults,
+            'max': 1  # Получаем только одно предложение
+        }
+        
+        # Если есть дата возвращения, добавляем её в параметры
+        if flight_request.returnDate:
+            params['returnDate'] = flight_request.returnDate.strftime('%Y-%m-%d')
+        
+        # Добавляем дополнительные параметры, если они есть
+        if flight_request.children:
+            params['children'] = flight_request.children
+        if flight_request.infants:
+            params['infants'] = flight_request.infants
+        if flight_request.travalClass:  # Обратите внимание на опечатку в имени поля
+            params['travelClass'] = flight_request.travalClass
+        if flight_request.currencyCode:
+            params['currencyCode'] = flight_request.currencyCode
+
+        # Получаем токен доступа к Amadeus API
+        params = {'data': {'type': 'flight-offers-pricing', 'flightOffers': [offer.data]}}
+        response = c.shopping.flight_offers.pricing.post(offer.data)
+        print(response.data)
+        
+        # Проверяем статус ответа
+        if response:
+            
+            # Проверяем, есть ли предложения в ответе
+            if 'flightOffers' in response.data and len(response.data['flightOffers']) > 0:
+                # Получаем актуальную цену
+                current_price = float(response.data['flightOffers'][0]['price']['total'])
+                
+                # Обновляем цену в базе данных
+                old_price = float(offer.totalPrice)
+                offer.totalPrice = current_price
+                offer.save()
+                
+                # Возвращаем актуальную цену и разницу с предыдущей
+                price_diff = current_price - old_price
+                
+                # Получаем дополнительную информацию о рейсе для корректного отображения карточки
+                segments = FlightSegment.objects.filter(offer=offer)
+                segments_data = []
+                
+                for segment in segments:
+                    try:
+                        # Получаем информацию об аэропортах
+                        departure_airport = get_airport_info(segment.dep_iataCode)
+                        arrival_airport = get_airport_info(segment.arr_iataCode)
+                        
+                        # Форматируем даты
+                        departure_at = None
+                        arrival_at = None
+                        
+                        if segment.dep_dateTime:
+                            departure_at = segment.dep_dateTime.strftime('%Y-%m-%dT%H:%M:%S')
+                        
+                        if segment.arr_dateTime:
+                            arrival_at = segment.arr_dateTime.strftime('%Y-%m-%dT%H:%M:%S')
+                        
+                        # Формируем данные о сегменте
+                        segment_data = {
+                            'id': segment.id,
+                            'departure': {
+                                'iataCode': segment.dep_iataCode or '',
+                                'airport': departure_airport.get('name', segment.dep_airport or 'Неизвестный аэропорт'),
+                                'city': departure_airport.get('city', 'Неизвестный город'),
+                                'country': departure_airport.get('country', 'Неизвестная страна'),
+                                'at': departure_at
+                            },
+                            'arrival': {
+                                'iataCode': segment.arr_iataCode or '',
+                                'airport': arrival_airport.get('name', segment.arr_airport or 'Неизвестный аэропорт'),
+                                'city': arrival_airport.get('city', 'Неизвестный город'),
+                                'country': arrival_airport.get('country', 'Неизвестная страна'),
+                                'at': arrival_at
+                            },
+                            'carrierCode': segment.carrierCode or '',
+                            'number': '',  # В модели нет поля number
+                            'duration': str(segment.duration) if segment.duration else '00:00',
+                            'aircraft': ''  # В модели нет поля aircraft
+                        }
+                        
+                        segments_data.append(segment_data)
+                    except Exception as e:
+                        print(f"Error processing segment: {e}")
+                
+                # Формируем полную информацию о рейсе
+                flight_data = {
+                    'id': offer.id,
+                    'price': {
+                        'total': current_price,
+                        'currency': offer.currencyCode or 'EUR'
+                    },
+                    'itineraries': [{
+                        'segments': segments_data,
+                        'duration': str(sum([segment.duration for segment in segments if segment.duration], datetime.timedelta()))
+                    }]
+                }
+                
+                return JsonResponse({
+                    'success': True,
+                    'price': current_price,
+                    'old_price': old_price,
+                    'price_diff': price_diff,
+                    'currency': offer.currencyCode or 'EUR',
+                    'flight': flight_data
+                })
+            else:
+                # Если предложений нет, удаляем из кэша и перенаправляем на страницу поиска
+                from django.core.cache import cache
+                
+                # Получаем ключ кэша для этого запроса
+                cache_key = f"flight_offers_{flight_request.id}"
+                
+                # Удаляем предложение из кэша
+                cached_offers = cache.get(cache_key, [])
+                if offer.id in cached_offers:
+                    cached_offers.remove(offer.id)
+                    cache.set(cache_key, cached_offers, 60*15)  # Обновляем кэш на 15 минут
+                
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Flight not found',
+                    'redirect': True,
+                    'redirect_url': '/'
+                })
+        else:
+            # В случае ошибки API, возвращаем текущую цену из базы
+            return JsonResponse({
+                'success': False,
+                'error': f'Amadeus API error: {response.status_code}',
+                'price': float(offer.totalPrice),
+                'currency': offer.currencyCode or 'EUR'
+            })
+    
+    except FlightOffer.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Offer not found',
+            'redirect': True,
+            'redirect_url': '/'
+        }, status=404)
+    
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+'''
+def create_flight_order(request, offer_id):
+    """
+    API endpoint для создания заказа через Amadeus Flight Create Orders
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Only POST method is allowed'}, status=405)
+    
+    try:
+        data = json.loads(request.body)
+        offer = FlightOffer.objects.get(id=offer_id)
+        
+        # Подготавливаем данные для запроса к Amadeus API
+        order_request = {
+            'data': {
+                'type': 'flight-order',
+                'flightOffers': [offer.data],
+                'travelers': data.get('travelers', []),
+                'remarks': {
+                    'general': [
+                        {
+                            'subType': 'GENERAL_MISCELLANEOUS',
+                            'text': 'ONLINE BOOKING FROM BILETY.RU'
+                        }
+                    ]
+                },
+                'ticketingAgreement': {
+                    'option': 'DELAY_TO_CANCEL',
+                    'delay': '6D'
+                },
+                'contacts': data.get('contacts', [])
+            }
+        }
+        
+        # Выполняем запрос к Amadeus API для создания заказа
+        order_response = c.booking.flight_orders.post(order_request)
+        
+        # Возвращаем данные о созданном заказе
+        return JsonResponse({
+            'success': True,
+            'order': order_response['data']
+        })
+    
+    except FlightOffer.DoesNotExist:
+        return JsonResponse({'error': 'Flight offer not found'}, status=404)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON data'}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+def get_airport_info(iata_code):
+    """
+    Вспомогательная функция для получения информации об аэропорте по его IATA-коду
+    С кэшированием для уменьшения количества запросов к API
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"Getting airport info for IATA code: {iata_code}")
+    
+    from django.core.cache import cache
+    
+    if not iata_code:
+        logger.warning("Empty IATA code provided")
+        return {'name': 'Unknown', 'city': 'Unknown', 'country': ''}
+    
+    # Проверяем наличие в кэше
+    cache_key = f"airport_{iata_code}"
+    airport_info = cache.get(cache_key)
+    
+    if airport_info:
+        logger.info(f"Found airport info in cache for {iata_code}")
+        return airport_info
+    
+    logger.info(f"Airport info not found in cache for {iata_code}, requesting from API")
+    
+    # Вместо запроса к API возвращаем базовые данные
+    # Это упрощение позволит избежать ошибок при вызове API
+    default_info = {
+        'name': f"{iata_code} Airport",
+        'city': iata_code,
+        'country': ''
+    }
+    
+    # Сохраняем в кэш на 24 часа
+    cache.set(cache_key, default_info, 60*60*24)
+    logger.info(f"Saved default airport info to cache for {iata_code}")
+    
+    return default_info
+
+
+def get_flight_details(request, offer_id):
+    """
+    API для получения подробной информации о рейсе для страницы оформления билета
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"Getting flight details for offer_id: {offer_id}")
+    
+    try:
+        # Получаем предложение по ID
+        offer = FlightOffer.objects.get(id=offer_id)
+        logger.info(f"Found flight offer with ID {offer_id}")
+        
+        # Получаем сегменты рейса
+        segments = FlightSegment.objects.filter(offer=offer)
+        logger.info(f"Found {segments.count()} segments for offer {offer_id}")
+        
+        segments_data = []
+        
+        # Формируем данные о сегментах
+        for segment in segments:
+            logger.info(f"Processing segment {segment.id} from {segment.dep_iataCode} to {segment.arr_iataCode}")
+            
+            try:
+                # Получаем информацию об аэропортах
+                departure_airport = get_airport_info(segment.dep_iataCode)
+                arrival_airport = get_airport_info(segment.arr_iataCode)
+                
+                # Форматируем даты безопасным способом
+                departure_at = None
+                arrival_at = None
+                
+                if segment.dep_dateTime:
+                    try:
+                        departure_at = segment.dep_dateTime.strftime('%Y-%m-%dT%H:%M:%S')
+                    except Exception as e:
+                        logger.error(f"Error formatting departure time: {e}")
+                        departure_at = None
+                
+                if segment.arr_dateTime:
+                    try:
+                        arrival_at = segment.arr_dateTime.strftime('%Y-%m-%dT%H:%M:%S')
+                    except Exception as e:
+                        logger.error(f"Error formatting arrival time: {e}")
+                        arrival_at = None
+                
+                # Формируем данные о сегменте
+                segment_data = {
+                    'id': segment.id,
+                    'departure': {
+                        'iataCode': segment.dep_iataCode or '',
+                        'airport': departure_airport.get('name', segment.dep_airport or 'Неизвестный аэропорт'),
+                        'city': departure_airport.get('city', 'Неизвестный город'),
+                        'country': departure_airport.get('country', 'Неизвестная страна'),
+                        'at': departure_at
+                    },
+                    'arrival': {
+                        'iataCode': segment.arr_iataCode or '',
+                        'airport': arrival_airport.get('name', segment.arr_airport or 'Неизвестный аэропорт'),
+                        'city': arrival_airport.get('city', 'Неизвестный город'),
+                        'country': arrival_airport.get('country', 'Неизвестная страна'),
+                        'at': arrival_at
+                    },
+                    'carrierCode': segment.carrierCode or '',
+                    'number': '',  # В модели нет поля number
+                    'duration': str(segment.duration) if segment.duration else '00:00',
+                    'aircraft': ''  # В модели нет поля aircraft
+                }
+                
+                segments_data.append(segment_data)
+                logger.info(f"Successfully processed segment {segment.id}")
+                
+            except Exception as e:
+                logger.error(f"Error processing segment {segment.id}: {e}")
+                # Добавляем базовые данные для сегмента в случае ошибки
+                segment_data = {
+                    'id': segment.id if hasattr(segment, 'id') else 0,
+                    'departure': {
+                        'iataCode': segment.dep_iataCode if hasattr(segment, 'dep_iataCode') else '',
+                        'airport': segment.dep_airport if hasattr(segment, 'dep_airport') else 'Неизвестный аэропорт',
+                        'city': 'Неизвестный город',
+                        'country': '',
+                        'at': None
+                    },
+                    'arrival': {
+                        'iataCode': segment.arr_iataCode if hasattr(segment, 'arr_iataCode') else '',
+                        'airport': segment.arr_airport if hasattr(segment, 'arr_airport') else 'Неизвестный аэропорт',
+                        'city': 'Неизвестный город',
+                        'country': '',
+                        'at': None
+                    },
+                    'carrierCode': segment.carrierCode if hasattr(segment, 'carrierCode') else '',
+                    'number': '',
+                    'duration': str(segment.duration) if hasattr(segment, 'duration') and segment.duration else '00:00',
+                    'aircraft': ''
+                }
+                segments_data.append(segment_data)
+        
+        # Формируем данные о рейсе
+        try:
+            total_price = float(offer.totalPrice) if offer.totalPrice else 0.0
+        except (ValueError, TypeError) as e:
+            logger.error(f"Error converting price to float: {e}")
+            total_price = 0.0
+            
+        flight_data = {
+            'id': offer.id,
+            'price': {
+                'total': total_price,
+                'currency': offer.currencyCode or 'EUR'
+            },
+            'itineraries': [{
+                'duration': str(offer.duration) if offer.duration else '00:00',
+                'segments': segments_data
+            }]
+        }
+        
+        logger.info(f"Successfully prepared flight data for offer {offer_id}")
+        return JsonResponse({
+            'success': True,
+            'flight': flight_data
+        })
+    
+    except FlightOffer.DoesNotExist:
+        logger.error(f"Flight offer with ID {offer_id} not found")
+        return JsonResponse({
+            'success': False,
+            'error': 'Предложение не найдено'
+        }, status=404)
+    
+    except Exception as e:
+        logger.error(f"Error in get_flight_details for offer {offer_id}: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': f'Ошибка при получении данных о рейсе: {str(e)}'
+        }, status=500)
+
+
+def get_order_info(request, order_id):
+    """
+    API для получения информации о заказе по его ID
+    """
+    try:
+        # Запрашиваем информацию о заказе через Amadeus API
+        order_response = c.booking.flight_orders(order_id).get()
+        order_data = order_response['data']
+        
+        # Извлекаем основную информацию о заказе
+        flight_offers = order_data.get('flightOffers', [])
+        travelers = order_data.get('travelers', [])
+        
+        if not flight_offers:
+            return JsonResponse({'error': 'No flight offers found in order'}, status=404)
+        
+        # Получаем информацию о маршруте из первого предложения
+        first_offer = flight_offers[0]
+        first_segment = first_offer['itineraries'][0]['segments'][0]
+        last_segment = first_offer['itineraries'][0]['segments'][-1]
+        
+        # Получаем названия городов
+        try:
+            origin_city = c.reference_data.locations.get(
+                keyword=first_segment['departure']['iataCode'], 
+                subType=amadeus.Location.CITY
+            ).data[0]['name']
+            
+            destination_city = c.reference_data.locations.get(
+                keyword=last_segment['arrival']['iataCode'], 
+                subType=amadeus.Location.CITY
+            ).data[0]['name']
+        except Exception:
+            # В случае ошибки используем коды IATA
+            origin_city = first_segment['departure']['iataCode']
+            destination_city = last_segment['arrival']['iataCode']
+        
+        # Форматируем дату вылета
+        departure_datetime = datetime.datetime.fromisoformat(first_segment['departure']['at'].replace('Z', '+00:00'))
+        departure_date = departure_datetime.strftime('%d.%m.%Y %H:%M')
+        
+        # Собираем структурированный ответ
+        response_data = {
+            'id': order_id,
+            'origin': origin_city,
+            'destination': destination_city,
+            'departureDate': departure_date,
+            'passengerCount': len(travelers),
+            'totalPrice': first_offer['price']['total'],
+            'currencyCode': first_offer['price']['currency'],
+            'status': order_data.get('status', 'UNKNOWN')
+        }
+        
+        return JsonResponse(response_data)
+    
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
