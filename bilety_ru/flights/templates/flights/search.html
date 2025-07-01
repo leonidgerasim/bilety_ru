@@ -1,103 +1,56 @@
 {% extends 'flights/base.html' %}
-<!--{% load static %}-->
+{% load static %}
 
 {% block title %}Поиск авиабилетов - Билеты.ру{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'flights/css/search.css' %}">
+{% endblock %}
 
 {% block content %}
 <div class="row">
     <div class="col-md-12">
         <h2 class="mb-4">Поиск авиабилетов</h2>
-        
-        {% if has_search_history %}
-        <div class="card mb-4">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="mb-0">История поисков</h5>
-                <button id="clearSearchHistory" class="btn btn-sm btn-outline-danger">
-                    <i class="fas fa-trash-alt mr-1"></i>Очистить историю
-                </button>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    {% for request in search_history %}
-                    <div class="col-md-6 mb-2">
-                        <div class="d-flex align-items-center p-2 border rounded">
-                            <div>
-                                <i class="fas fa-plane-departure text-primary mr-2"></i>
-                            </div>
-                            <div class="flex-grow-1">
-                                <div><strong>{{ request.originLocationCode }} → {{ request.destinationLocationCode }}</strong></div>
-                                <div class="small text-muted">{{ request.departureDate|date:"d.m.Y" }}{% if request.returnDate %} - {{ request.returnDate|date:"d.m.Y" }}{% endif %}, {{ request.adults }} взр.{% if request.children %}, {{ request.children }} дет.{% endif %}</div>
-                            </div>
-                            <div>
-                                <form method="post" action="{% url 'flights:home' %}">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="originLocationCode" value="{{ request.originLocationCode }}">
-                                    <input type="hidden" name="destinationLocationCode" value="{{ request.destinationLocationCode }}">
-                                    <input type="hidden" name="departureDate" value="{{ request.departureDate|date:"Y-m-d" }}">
-                                    {% if request.returnDate %}
-                                    <input type="hidden" name="returnDate" value="{{ request.returnDate|date:"Y-m-d" }}">
-                                    {% endif %}
-                                    <input type="hidden" name="adults" value="{{ request.adults }}">
-                                    {% if request.children %}
-                                    <input type="hidden" name="children" value="{{ request.children }}">
-                                    {% endif %}
-                                    {% if request.infants %}
-                                    <input type="hidden" name="infants" value="{{ request.infants }}">
-                                    {% endif %}
-                                    <input type="hidden" name="currencyCode" value="{{ request.currencyCode }}">
-                                    <button type="submit" class="btn btn-sm btn-primary">
-                                        <i class="fas fa-search mr-1"></i>Повторить
-                                    </button>
-                                </form>
-                            </div>
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
-        </div>
-        {% endif %}
-        
         <div class="search-form">
                 <form method="post" id="cityForm" class="row">
                     {% csrf_token %}
                     <div class="form-group col-md-4">
-                        <label for="{{ form.currencyCode.id_for_label }}">{{ form.currencyCode.label }}:</label>
-                        {{ form.currencyCode|safe }}
+                        {{ form.currencyCode.label }}:
+                        {{ form.currencyCode }}
                     </div>
                     <div class="form-group col-md-4">
-                        <label for="{{ form.originLocationCode.id_for_label }}">{{ form.originLocationCode.label }}:</label>
+                        {{ form.originLocationCode.label }}:
                         <div class="autocomplete">
-                            {{ form.originLocationCode|safe }}
+                            {{ form.originLocationCode }}
                             <div id="originList" class="autocomplete-items"></div>
                         </div>
                     </div>
                     <div class="form-group col-md-4">
-                        <label for="{{ form.destinationLocationCode.id_for_label }}">{{ form.destinationLocationCode.label }}:</label>
+                        {{ form.destinationLocationCode.label }}:
                         <div class="autocomplete">
-                            {{ form.destinationLocationCode|safe }}
+                            {{ form.destinationLocationCode }}
                             <div id="destinationList" class="autocomplete-items"></div>
                         </div>
                     </div>
                     <div class="form-group col-md-4">
-                        <label for="{{ form.departureDate.id_for_label }}">{{ form.departureDate.label }}:</label>
-                        {{ form.departureDate|safe }}
+                        {{ form.departureDate.label }}:
+                        {{ form.departureDate }}
                     </div>
                     <div class="form-group col-md-4">
-                        <label for="{{ form.returnDate.id_for_label }}">{{ form.returnDate.label }}:</label>
-                        {{ form.returnDate|safe }}
+                        {{ form.returnDate.label }}:
+                        {{ form.returnDate }}
                     </div>
                     <div class="form-group col-md-4">
-                        <label for="{{ form.adults.id_for_label }}">{{ form.adults.label }}:</label>
-                        {{ form.adults|safe }}
+                        {{ form.adults.label }}:
+                        {{ form.adults }}
                     </div>
                     <div class="form-group col-md-4">
-                        <label for="{{ form.children.id_for_label }}">{{ form.children.label }}:</label>
-                        {{ form.children|safe }}
+                        {{ form.children.label }}:
+                        {{ form.children }}
                     </div>
                     <div class="form-group col-md-4">
-                        <label for="{{ form.infants.id_for_label }}">{{ form.infants.label }}:</label>
-                        {{ form.infants|safe }}
+                        {{ form.infants.label }}:
+                        {{ form.infants }}
                     </div>
                     <div class="form-group col-md-12 text-center">
                         <button type="submit" class="btn btn-primary">Найти билеты</button>
@@ -110,7 +63,7 @@
     <div class="row" id="flightResults">
         <!-- Здесь будут отображаться карточки рейсов -->
     </div>
-</div>
+
 
 <script src="{% static 'flights/js/search.js' %}"></script>
 {% endblock %}
