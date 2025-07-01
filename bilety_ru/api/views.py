@@ -7,14 +7,14 @@ import isodate
 import datetime
 import json
 from django.views.decorators.csrf import csrf_exempt
-import requests
+#import requests
 import datetime
 # Create your views here.
 
 c = amadeus.Client(client_id='1otgEUauKpjxxGPcPxSQvvsRz7o3fxv1',
                    client_secret='VgqvL5c92wzXcPgV')
 
-
+'''
 def get_amadeus_token():
     """
     Получение токена доступа к Amadeus API
@@ -44,6 +44,7 @@ def get_amadeus_token():
     except Exception as e:
         print(f"Exception in get_amadeus_token: {e}")
         return None
+'''
 
 def get_cities(request):
     query = request.GET.get("query", None)  # Получаем введённый текст

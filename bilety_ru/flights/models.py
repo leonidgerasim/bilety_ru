@@ -91,3 +91,14 @@ class Booking(models.Model):
     def __str__(self):
         return f"Бронирование #{self.id} - {self.status}"
 
+
+class JsonBuffer(models.Model):
+    data = models.JSONField(default=dict)
+
+
+class IATA(models.Model):
+    iata = models.CharField(max_length=3)
+    name = models.CharField(max_length=100)
+    city = models.CharField(max_length=100)
+    state = models.CharField(max_length=100)
+
