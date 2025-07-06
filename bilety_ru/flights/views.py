@@ -35,7 +35,7 @@ class OffersSearch(FormView):
         last_request = FlightRequest.objects.filter(
             session_key=session_key
         ).order_by('-created_at').first()
-        
+
         if last_request:
             # Заполняем форму данными из последнего запроса
             for field in ['originLocationCode', 'destinationLocationCode', 'departureDate', 
@@ -44,6 +44,9 @@ class OffersSearch(FormView):
                          'nonStop', 'maxPrice']:
                 if hasattr(last_request, field) and getattr(last_request, field) is not None:
                     initial[field] = getattr(last_request, field)
+        else:
+            initial['departureDate'] = datetime.date.today()
+            initial['returnDate'] = datetime.date.today() + datetime.timedelta(days=7)
 
         return initial
     
@@ -69,62 +72,6 @@ class OffersSearch(FormView):
         self.request.session['id_offer_search'] = flight_request.id
         
         # Запускаем поиск предложений через API
-        # Используем кэширование для уменьшения нагрузки на API
-        '''
-        from django.core.cache import cache
-        cache_key = f"flight_search_{flight_request.originLocationCode}_{flight_request.destinationLocationCode}_{flight_request.departureDate}"
-        
-        # Проверяем наличие кэшированных результатов
-        cached_offers = cache.get(cache_key)
-        search_success = False
-        
-        if cached_offers:
-            try:
-                # Если есть кэшированные результаты, копируем их для нового запроса
-                # Получаем предложения из кэша
-                cached_flight_offers = FlightOffer.objects.filter(id__in=cached_offers)
-                
-                if cached_flight_offers.exists():
-                    # Для каждого предложения создаем копию с новым запросом
-                    for cached_offer in cached_flight_offers:
-                        # Создаем новое предложение на основе кэшированного
-                        new_offer = FlightOffer(
-                            flightRequest=flight_request,
-                            dep_duration=cached_offer.dep_duration,
-                            arr_duration=cached_offer.arr_duration,
-                            duration=cached_offer.duration,
-                            currencyCode=cached_offer.currencyCode,
-                            totalPrice=cached_offer.totalPrice,
-                            data=cached_offer.data
-                        )
-                        new_offer.save()
-                        
-                        # Копируем сегменты рейса
-                        for segment in FlightSegment.objects.filter(offer=cached_offer):
-                            FlightSegment(
-                                offer=new_offer,
-                                dep_iataCode=segment.dep_iataCode,
-                                dep_airport=segment.dep_airport,
-                                dep_dateTime=segment.dep_dateTime,
-                                arr_iataCode=segment.arr_iataCode,
-                                arr_airport=segment.arr_airport,
-                                arr_dateTime=segment.arr_dateTime,
-                                carrierCode=segment.carrierCode,
-                                duration=segment.duration
-                            ).save()
-                    
-                    search_success = True
-                    print(f"Использованы кэшированные результаты для запроса {flight_request.id}")
-                else:
-                    # Если кэшированные предложения не найдены, выполняем новый поиск
-                    search_success = False
-            except Exception as e:
-                print(f"Ошибка при использовании кэшированных результатов: {e}")
-                search_success = False
-        '''
-        # Если кэшированные результаты не найдены или произошла ошибка, выполняем новый поиск
-        #if not search_success:
-            # Выполняем новый поиск через API
         search_success = offer_search_api(flight_request.id)
         # Если запрос AJAX, возвращаем JSON-ответ
         if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
@@ -135,14 +82,14 @@ class OffersSearch(FormView):
     def form_invalid(self, form):
         if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return JsonResponse({'success': False, 'errors': form.errors})
-        return render(self.request, self.template_name, {'form': form})
+        return HttpResponse(form.errors, status=400)#render(self.request, self.template_name, {'form': form})
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         
-        
         # Получаем результаты последнего поиска
         if 'id_offer_search' in self.request.session:
+        
             try:
                 flight_req = FlightRequest.objects.filter(id=self.request.session['id_offer_search']).last()
                 if flight_req:

@@ -12,7 +12,6 @@ class FlightRequest(models.Model):
     originLocationCode = models.CharField(max_length=50)
     destinationLocationCode = models.CharField(max_length=50)
     departureDate = models.DateField()
-    # departureTime = models.TimeField(default=datetime.time(10, 10, 10))
     returnDate = models.DateField(null=True, blank=True)
     adults = models.IntegerField(default=1)
     children = models.IntegerField(null=True, blank=True)
@@ -28,11 +27,6 @@ class FlightRequest(models.Model):
 
 class FlightOffer(models.Model):
     flightRequest = models.ForeignKey(FlightRequest, on_delete=models.CASCADE)
-    #instantTicketingRequired = models.BooleanField()
-    #nonHomogeneous = models.BooleanField()
-    #oneWay = models.BooleanField()
-    #lastTicketingDate = models.DateField()
-    # numberSeats = models.IntegerField()
     adults_count = models.IntegerField()
     children_count = models.IntegerField(null=True, blank=True)
     infants_count = models.IntegerField(null=True, blank=True)
@@ -90,15 +84,3 @@ class Booking(models.Model):
     
     def __str__(self):
         return f"Бронирование #{self.id} - {self.status}"
-
-
-class JsonBuffer(models.Model):
-    data = models.JSONField(default=dict)
-
-
-class IATA(models.Model):
-    iata = models.CharField(max_length=3)
-    name = models.CharField(max_length=100)
-    city = models.CharField(max_length=100)
-    state = models.CharField(max_length=100)
-

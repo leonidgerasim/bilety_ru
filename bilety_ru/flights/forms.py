@@ -12,14 +12,12 @@ class OfferSearchForm(forms.ModelForm):
     adults = forms.IntegerField(
         min_value=1, 
         max_value=9, 
-        initial=1,
         label='Взрослые (от 12 лет)',
         widget=forms.NumberInput(attrs={'class': 'form-control', 'min': '1', 'max': '9'})
     )
     children = forms.IntegerField(
         min_value=0, 
         max_value=9, 
-        initial=0,
         required=False,
         label='Дети (от 2 до 12 лет)',
         widget=forms.NumberInput(attrs={'class': 'form-control', 'min': '0', 'max': '9'})
@@ -27,7 +25,6 @@ class OfferSearchForm(forms.ModelForm):
     infants = forms.IntegerField(
         min_value=0, 
         max_value=9, 
-        initial=0,
         required=False,
         label='Младенцы (до 2 лет)',
         widget=forms.NumberInput(attrs={'class': 'form-control', 'min': '0', 'max': '9'})
@@ -35,14 +32,7 @@ class OfferSearchForm(forms.ModelForm):
 
     class Meta:
         model = FlightRequest
-        fields = ('currencyCode',
-                  'originLocationCode',
-                  'destinationLocationCode',
-                  'departureDate',
-                  'returnDate',
-                  'adults',
-                  'children',
-                  'infants')
+        fields = '__all__'
         labels = {
             'currencyCode': "Валюта",
             'originLocationCode': 'Аэропорт отправления',

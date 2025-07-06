@@ -218,6 +218,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Обработчик отправки формы поиска
+    /*
     const searchForm = document.getElementById('cityForm');
     if (searchForm) {
         searchForm.addEventListener('submit', function(e) {
@@ -249,9 +250,119 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
     }
-    
+    */
     // Проверяем, есть ли результаты поиска в сессии при загрузке страницы
     //if (document.getElementById('flightResults')) {
       //  fetchFlightOffers();
     //}
+    
+    // Функциональность для блока параметров сортировки
+    const toggleSortingBtn = document.getElementById('toggleSortingOptions');
+    const sortingBody = document.getElementById('sortingBody');
+    const applySortingBtn = document.getElementById('applySorting');
+    const resetSortingBtn = document.getElementById('resetSorting');
+    
+    if (toggleSortingBtn && sortingBody) {
+        toggleSortingBtn.addEventListener('click', function() {
+            if (sortingBody.classList.contains('active')) {
+                sortingBody.classList.remove('active');
+                toggleSortingBtn.innerHTML = '<i class="fas fa-chevron-down"></i> Показать опции';
+            } else {
+                sortingBody.classList.add('active');
+                toggleSortingBtn.innerHTML = '<i class="fas fa-chevron-up"></i> Скрыть опции';
+            }
+        });
+    }
+    
+    // Обработчик применения параметров сортировки
+    if (applySortingBtn) {
+        applySortingBtn.addEventListener('click', function() {
+            // Получаем значения параметров сортировки
+            const sortBy = document.getElementById('sortBy').value;
+            const maxPrice = document.getElementById('maxPrice').value;
+            const maxStops = document.getElementById('maxStops').value;
+            const airlinesSelect = document.getElementById('airlines');
+            const selectedAirlines = Array.from(airlinesSelect.selectedOptions).map(option => option.value);
+            
+            // Здесь будет логика применения сортировки к результатам
+            console.log('Применяем сортировку:', {
+                sortBy,
+                maxPrice,
+                maxStops,
+                selectedAirlines
+            });
+            
+            // Пример сортировки результатов (в реальном приложении нужно реализовать полноценную логику)
+            sortFlightResults(sortBy, maxPrice, maxStops, selectedAirlines);
+        });
+    }
+    
+    // Обработчик сброса параметров сортировки
+    if (resetSortingBtn) {
+        resetSortingBtn.addEventListener('click', function() {
+            // Сбрасываем значения формы сортировки
+            document.getElementById('sortingForm').reset();
+            
+            // Возвращаем исходную сортировку результатов
+            console.log('Сбрасываем параметры сортировки');
+            resetSortingResults();
+        });
+    }
+    
+    // Функция для сортировки результатов поиска
+    function sortFlightResults(sortBy, maxPrice, maxStops, selectedAirlines) {
+        const flightResults = document.getElementById('flightResults');
+        if (!flightResults) return;
+        
+        const flightCards = Array.from(flightResults.querySelectorAll('.flight-card'));
+        
+        // Сортировка по выбранному критерию
+        flightCards.sort((a, b) => {
+            // Получаем данные для сортировки
+            const priceA = parseFloat(a.querySelector('.flight-price').textContent.trim().split(' ')[0]);
+            const priceB = parseFloat(b.querySelector('.flight-price').textContent.trim().split(' ')[0]);
+            
+            // Сортировка по цене
+            if (sortBy === 'price_asc') {
+                return priceA - priceB;
+            } else if (sortBy === 'price_desc') {
+                return priceB - priceA;
+            }
+            
+            // Здесь можно добавить другие критерии сортировки
+            // Например, по длительности, времени вылета и т.д.
+            
+            return 0;
+        });
+        
+        // Фильтрация по максимальной цене
+        let filteredCards = flightCards;
+        if (maxPrice && maxPrice > 0) {
+            filteredCards = filteredCards.filter(card => {
+                const price = parseFloat(card.querySelector('.flight-price').textContent.trim().split(' ')[0]);
+                return price <= maxPrice;
+            });
+        }
+        
+        // Очищаем и добавляем отсортированные карточки
+        flightResults.innerHTML = '';
+        filteredCards.forEach(card => {
+            flightResults.appendChild(card);
+        });
+        
+        // Если нет результатов после фильтрации
+        if (filteredCards.length === 0) {
+            const noResults = document.createElement('div');
+            noResults.className = 'col-12 text-center my-4';
+            noResults.innerHTML = '<p class="text-muted">Нет результатов, соответствующих выбранным параметрам</p>';
+            flightResults.appendChild(noResults);
+        }
+    }
+    
+    // Функция для сброса сортировки
+    function resetSortingResults() {
+        // В реальном приложении здесь можно восстановить исходный порядок результатов
+        // или перезагрузить их с сервера
+        location.reload(); // Временное решение - перезагрузка страницы
+    }
 });

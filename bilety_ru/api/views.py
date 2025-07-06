@@ -2,11 +2,14 @@ from django.shortcuts import render
 import amadeus
 from django.http import JsonResponse
 from django.forms.models import model_to_dict
+from .models import IATA
 from flights.models import FlightRequest, FlightOffer, FlightSegment
 import isodate
 import datetime
 import json
 from django.views.decorators.csrf import csrf_exempt
+from rest_framework.views import APIView
+from rest_framework.response import Response
 #import requests
 import datetime
 # Create your views here.
@@ -14,37 +17,6 @@ import datetime
 c = amadeus.Client(client_id='1otgEUauKpjxxGPcPxSQvvsRz7o3fxv1',
                    client_secret='VgqvL5c92wzXcPgV')
 
-'''
-def get_amadeus_token():
-    """
-    Получение токена доступа к Amadeus API
-    """
-    try:
-        # Параметры для запроса токена
-        url = 'https://test.api.amadeus.com/v1/security/oauth2/token'
-        headers = {
-            'Content-Type': 'application/x-www-form-urlencoded'
-        }
-        data = {
-            'grant_type': 'client_credentials',
-            'client_id': '1otgEUauKpjxxGPcPxSQvvsRz7o3fxv1',
-            'client_secret': 'VgqvL5c92wzXcPgV'
-        }
-        
-        # Выполняем запрос для получения токена
-        response = requests.post(url, headers=headers, data=data)
-        
-        # Проверяем статус ответа
-        if response.status_code == 200:
-            token_data = response.json()
-            return token_data['access_token']
-        else:
-            print(f"Error getting Amadeus token: {response.status_code} - {response.text}")
-            return None
-    except Exception as e:
-        print(f"Exception in get_amadeus_token: {e}")
-        return None
-'''
 
 def get_cities(request):
     query = request.GET.get("query", None)  # Получаем введённый текст
@@ -63,23 +35,20 @@ def offer_search_api(flight_req_id):
     try:
         # Проверяем существование запроса
         flight_req = FlightRequest.objects.get(id=flight_req_id)
-        
+
         # Преобразуем модель в словарь для передачи в API
         kwargs = model_to_dict(flight_req)
         d = {}
         for key in kwargs.keys():
-            if kwargs[key] is not None and key not in ['id', 'user', 'session_key', 'create_at']:
-                d[key] = kwargs[key]
+           if kwargs[key] is not None and key not in ['id', 'user', 'session_key', 'created_at']:
+              d[key] = kwargs[key]
         
         # Ограничиваем количество результатов
-        d['max'] = 5
-        
-        # Кэш для хранения информации об аэропортах, чтобы не делать повторные запросы
-        airport_cache = {}
-        
+        d['max'] = 6
+
         # Выполняем поиск рейсов
         search_flights = c.shopping.flight_offers_search.get(**d)
-        
+
         # Проверяем, есть ли результаты
         if not search_flights.data:
             print(f"No flights found for request ID: {flight_req_id}")
@@ -124,36 +93,10 @@ def offer_search_api(flight_req_id):
             for segment in flight['itineraries'][0]['segments']:
                 # Получаем информацию о аэропортах отправления и прибытия
                 dep_iata = segment['departure']['iataCode']
+                dep_airoport = IATA.objects.get(iata=dep_iata).city
+
                 arr_iata = segment['arrival']['iataCode']
-                
-                # Используем кэш для избежания повторных запросов к API
-                if dep_iata not in airport_cache:
-                    try:
-                        dep_location = c.reference_data.locations.get(
-                            keyword=dep_iata, 
-                            subType=amadeus.Location.AIRPORT
-                        )
-                        if dep_location.data:
-                            airport_cache[dep_iata] = dep_location.data[0].get('name', dep_iata)
-                        else:
-                            airport_cache[dep_iata] = dep_iata
-                    except Exception as e:
-                        print(f"Error getting departure airport info: {e}")
-                        airport_cache[dep_iata] = dep_iata
-                
-                if arr_iata not in airport_cache:
-                    try:
-                        arr_location = c.reference_data.locations.get(
-                            keyword=arr_iata, 
-                            subType=amadeus.Location.AIRPORT
-                        )
-                        if arr_location.data:
-                            airport_cache[arr_iata] = arr_location.data[0].get('name', arr_iata)
-                        else:
-                            airport_cache[arr_iata] = arr_iata
-                    except Exception as e:
-                        print(f"Error getting arrival airport info: {e}")
-                        airport_cache[arr_iata] = arr_iata
+                arr_airoport = IATA.objects.get(iata=arr_iata).city
                 
                 # Парсим продолжительность сегмента
                 try:
@@ -170,10 +113,10 @@ def offer_search_api(flight_req_id):
                 FlightSegment(
                     offer=offer,
                     dep_iataCode=dep_iata,
-                    dep_airport=airport_cache[dep_iata],
+                    dep_airport=dep_airoport,
                     dep_dateTime=segment['departure']['at'],
                     arr_iataCode=arr_iata,
-                    arr_airport=airport_cache[arr_iata],
+                    arr_airport=arr_airoport,
                     arr_dateTime=segment['arrival']['at'],
                     carrierCode=segment['carrierCode'],
                     duration=duration_seg
@@ -254,12 +197,8 @@ def transform_airport(airport):
     return airport
 
 
-def search_airports(request):
-    """
-    API для поиска аэропортов по ключевому слову через Amadeus API
-    """
-    try:
-        # Получаем параметр поиска из запроса
+class SearchAirports(APIView):
+    def get(self, request):
         keyword = request.GET.get('keyword', '')
         if not keyword or len(keyword) < 1:
             return JsonResponse({
@@ -267,17 +206,12 @@ def search_airports(request):
                 'error': 'Keyword parameter is required'
             }, status=400)
         
-        # Выполняем запрос к Amadeus API для поиска аэропортов
         response = c.reference_data.locations.get(keyword=keyword, subType=amadeus.Location.AIRPORT)
-
-        # Проверяем статус ответа
         if response.data:
             data = response.data
-            # Форматируем результаты для удобного использования на фронтенде
             airports = []
             if len(data) > 0:
                 for item in data:
-
                     airport = {
                         'iataCode': item['iataCode'],
                         'cityName': transform_airport(item['address']['cityName'])
@@ -288,18 +222,10 @@ def search_airports(request):
                 'airports': airports
             })
         else:
-            # В случае ошибки API
             return JsonResponse({
                 'success': False,
-                'error': f'Amadeus API error: {response.status_code}',
-                'details': response.text
-            }, status=response.status_code)
-    
-    except Exception as e:
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
-        }, status=500)
+                'error': 'Airports not found'
+            }, status=404)
 
 
 def check_flight_price(request, offer_id):

@@ -1,4 +1,5 @@
 
+
 .card {
     border-radius: var(--border-radius);
     border: none;
@@ -13,7 +14,7 @@
 .flight-card {
     border-radius: 10px;
     box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-    margin-bottom: 20px;
+    margin: 10px;
     transition: transform 0.3s;
 }
 .flight-card:hover {
@@ -38,6 +39,7 @@
     margin-bottom: 15px;
     padding-bottom: 15px;
     border-bottom: 1px dashed #eee;
+    gap: 15px;
 }
 .flight-segment:last-child {
     border-bottom: none;
@@ -68,6 +70,12 @@
     background-color: #0056b3;
 }
 
+.context-segment {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 90px;
+}
 
 /* Стили для формы поиска */
 
@@ -149,4 +157,69 @@
     text-align: center;
     padding: 15px;
     font-style: italic;
+}
+
+/* Стили для блока с параметрами сортировки */
+
+.sorting-options {
+    background-color: #f0f8ff; /* Светло-голубой фон для отличия от основной формы */
+    border-radius: 10px;
+    margin-top: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.08);
+    border-left: 4px solid #007bff; /* Синяя полоса слева для визуального отличия */
+}
+
+.sorting-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    border-bottom: 1px solid #e3f2fd;
+}
+
+.sorting-header h5 {
+    margin: 0;
+    color: #0056b3;
+    font-weight: 600;
+}
+
+.sorting-body {
+    padding: 20px;
+    display: none; /* По умолчанию скрыт, будет показываться по клику */
+}
+
+.sorting-body.active {
+    display: block;
+}
+
+#sortingForm .form-group label {
+    color: #0056b3;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+#sortingForm select, #sortingForm input {
+    border: 1px solid #b8daff;
+    background-color: #fff;
+}
+
+#sortingForm select:focus, #sortingForm input:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+#sortingForm select[multiple] {
+    height: 100px;
+}
+
+#applySorting, #resetSorting {
+    margin: 5px;
+}
+
+/* Добавим скрипт для переключения видимости блока сортировки */
+@media (max-width: 768px) {
+    .sorting-options .form-group {
+        margin-bottom: 15px;
+    }
 }

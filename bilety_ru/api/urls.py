@@ -5,7 +5,7 @@ app_name = 'api'
 
 urlpatterns = [
     path('cities/', views.get_cities, name='get_cities'),
-    path('airports/', views.search_airports, name='search_airports'),
+    path('airports/', views.SearchAirports.as_view(), name='search_airports'),
     path('flight-offers/', views.get_structured_flight_offers, name='get_structured_flight_offers'),
     path('check-price/<int:offer_id>/', views.check_flight_price, name='check_flight_price'),
     path('flight-details/<int:offer_id>/', views.get_flight_details, name='get_flight_details'),
